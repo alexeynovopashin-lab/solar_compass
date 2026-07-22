@@ -8,9 +8,11 @@
         :root {
             --bg: #050505;
             --text-primary: #ffffff;
-            --text-secondary: rgba(255, 255, 255, 0.4);
+            --text-secondary: rgba(255, 255, 255, 0.45);
             --accent-sun: #ffd25f;
             --accent-glow: rgba(255, 210, 95, 0.4);
+            --surface: rgba(255, 255, 255, 0.08);
+            --surface-border: rgba(255, 255, 255, 0.15);
         }
 
         * {
@@ -30,7 +32,7 @@
             flex-direction: column;
             justify-content: space-between;
             align-items: center;
-            padding: calc(env(safe-area-inset-top) + 24px) 24px calc(env(safe-area-inset-bottom) + 24px);
+            padding: calc(env(safe-area-inset-top) + 20px) 24px calc(env(safe-area-inset-bottom) + 24px);
             user-select: none;
             -webkit-user-select: none;
             -webkit-tap-highlight-color: transparent;
@@ -49,7 +51,7 @@
             z-index: 0;
         }
 
-        /* --- СТАРТОВЫЙ ЭКРАН (PWA FIX) --- */
+        /* --- СТАРТОВЫЙ ЭКРАН (PWA) --- */
         .start-overlay {
             position: fixed;
             inset: 0;
@@ -59,9 +61,7 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            transition: opacity 0.6s ease, backdrop-filter 0.6s ease;
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
+            transition: opacity 0.5s ease;
         }
 
         .start-overlay.hidden {
@@ -69,45 +69,32 @@
             pointer-events: none;
         }
 
-        .start-icon {
-            font-size: 48px;
-            margin-bottom: 24px;
-            opacity: 0.9;
-        }
-
         .start-btn {
-            background: rgba(255, 255, 255, 0.1);
-            border: 1px solid rgba(255, 255, 255, 0.15);
+            background: var(--surface);
+            border: 1px solid var(--surface-border);
             color: var(--text-primary);
-            padding: 16px 36px;
+            padding: 18px 42px;
             border-radius: 100px;
             font-size: 16px;
             font-weight: 500;
             cursor: pointer;
             transition: transform 0.2s, background 0.2s;
-            margin-bottom: 16px;
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
         }
 
         .start-btn:active {
-            transform: scale(0.96);
-            background: rgba(255, 255, 255, 0.15);
+            transform: scale(0.95);
+            background: rgba(255, 255, 255, 0.18);
         }
 
-        .start-hint {
-            font-size: 13px;
-            color: var(--text-secondary);
-            text-align: center;
-            max-width: 220px;
-            line-height: 1.4;
-        }
-
-        /* --- ОСНОВНОЙ ИНТЕРФЕЙС --- */
+        /* --- ВЕРХНИЙ БЛОК --- */
         .display-header {
             position: relative;
             z-index: 1;
             text-align: center;
             margin-top: 10px;
-            min-height: 120px;
+            min-height: 110px;
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -120,27 +107,27 @@
             color: var(--text-secondary);
             letter-spacing: -0.2px;
             min-height: 24px;
-            transition: opacity 0.3s ease;
         }
 
         .time-value {
-            font-size: 76px;
+            font-size: 72px;
             font-weight: 100;
             letter-spacing: -3px;
             line-height: 1;
             color: var(--text-primary);
             font-variant-numeric: tabular-nums;
             margin-top: 4px;
-            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.3s ease;
+            min-height: 72px;
         }
 
         .time-value.dots {
-            font-size: 48px;
+            font-size: 40px;
             font-weight: 200;
             letter-spacing: 6px;
             color: var(--text-secondary);
         }
 
+        /* --- КОМПАС --- */
         .compass-viewport {
             position: relative;
             z-index: 1;
@@ -149,11 +136,12 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            transition: transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+            cursor: pointer;
+            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
         }
 
         .compass-viewport.locked {
-            transform: scale(1.04);
+            transform: scale(1.05);
         }
 
         .compass-svg {
@@ -174,7 +162,7 @@
             border-radius: 50%;
             box-shadow: 0 0 16px var(--accent-sun), 0 0 32px var(--accent-glow);
             z-index: 3;
-            transition: opacity 0.3s ease, transform 0.1s linear;
+            transition: opacity 0.3s ease;
             opacity: 0;
         }
 
@@ -209,14 +197,62 @@
             opacity: 0.5;
         }
 
+        /* --- НИЖНИЙ БЛОК: КНОПКА СПУСКА КАМЕРЫ --- */
         .footer-meta {
             position: relative;
             z-index: 1;
-            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 16px;
+            width: 100%;
+        }
+
+        .shutter-btn {
+            width: 72px;
+            height: 72px;
+            border-radius: 50%;
+            border: 3px solid rgba(255, 255, 255, 0.85);
+            background: transparent;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            outline: none;
+            -webkit-tap-highlight-color: transparent;
+            transition: border-color 0.3s ease, transform 0.15s ease;
+        }
+
+        .shutter-btn:active {
+            transform: scale(0.93);
+        }
+
+        .shutter-inner {
+            width: 58px;
+            height: 58px;
+            border-radius: 50%;
+            background: #ffffff;
+            transition: transform 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275), 
+                        background-color 0.25s ease, 
+                        border-radius 0.25s ease,
+                        box-shadow 0.25s ease;
+        }
+
+        /* Зафиксированное состояние (Индикатор захвата кадра) */
+        .shutter-btn.active {
+            border-color: var(--accent-sun);
+        }
+
+        .shutter-btn.active .shutter-inner {
+            background: var(--accent-sun);
+            box-shadow: 0 0 20px var(--accent-glow);
+            transform: scale(0.72);
+            border-radius: 14px;
         }
 
         .location-name {
-            font-size: 15px;
+            font-size: 13px;
             font-weight: 400;
             color: var(--text-secondary);
             letter-spacing: 0.2px;
@@ -225,19 +261,18 @@
 </head>
 <body>
 
-    <!-- Стартовый экран для инициализации сенсоров -->
+    <!-- Стартовый экран для авторизации датчиков -->
     <div class="start-overlay" id="startOverlay">
-        <div class="start-icon">🧭</div>
-        <button class="start-btn" id="startBtn">Начать калибровку</button>
-        <div class="start-hint">Для расчета траектории нужен доступ к геопозиции и гироскопу</div>
+        <button class="start-btn" id="startBtn">Включить компас</button>
     </div>
 
-    <!-- Основной интерфейс -->
+    <!-- Заголовок и вычисленное время -->
     <div class="display-header">
         <div class="date-label" id="dateLabel">Наведитесь</div>
         <div class="time-value" id="timeValue"></div>
     </div>
 
+    <!-- Визуальный компас -->
     <div class="compass-viewport" id="compassViewport">
         <div class="target-line" id="targetLine"></div>
         <div class="sun-marker" id="sunMarker"></div>
@@ -254,12 +289,16 @@
         </svg>
     </div>
 
+    <!-- Кнопка спуска Фотокамеры -->
     <div class="footer-meta">
-        <div class="location-name" id="locationLabel">—</div>
+        <button class="shutter-btn" id="calcBtn" aria-label="Сделать замер">
+            <div class="shutter-inner"></div>
+        </button>
+        <div class="location-name" id="locationLabel">Определение...</div>
     </div>
 
     <script>
-        // Отрисовка рисок компаса
+        // Рендер рисок компаса
         const ticksGroup = document.getElementById('ticksGroup');
         for (let i = 0; i < 360; i += 5) {
             const isMajor = i % 30 === 0;
@@ -277,7 +316,7 @@
             ticksGroup.appendChild(line);
         }
 
-        // Переменные
+        // Элементы UI
         const dateLabel = document.getElementById('dateLabel');
         const timeValue = document.getElementById('timeValue');
         const locationLabel = document.getElementById('locationLabel');
@@ -285,60 +324,52 @@
         const compassViewport = document.getElementById('compassViewport');
         const sunMarker = document.getElementById('sunMarker');
         const targetLine = document.getElementById('targetLine');
-        
+        const calcBtn = document.getElementById('calcBtn');
         const startOverlay = document.getElementById('startOverlay');
         const startBtn = document.getElementById('startBtn');
 
+        // Переменные состояния
         let userLat = null;
         let userLon = null;
         let currentHeading = 0;
         let lastRawHeading = 0;
         let unwrappedHeading = 0;
-        let motionTimer = null;
-        let isSearching = false;
+        let lastCalculatedHeading = null;
+        let isLocked = false;
 
-        // Инициализация по тапу (Критично для iOS Safari/PWA)
+        // Инициализация датчиков
         startBtn.addEventListener('click', async () => {
-            startBtn.textContent = 'Инициализация...';
+            startBtn.textContent = 'Подключение...';
             startBtn.style.pointerEvents = 'none';
 
-            let orientationGranted = false;
-
-            // 1. Запрос Гироскопа
             if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
                 try {
                     const state = await DeviceOrientationEvent.requestPermission();
                     if (state === 'granted') {
-                        orientationGranted = true;
                         window.addEventListener('deviceorientation', handleOrientation, true);
                     } else {
-                        startBtn.textContent = 'Отказано в доступе';
-                        return; // Без компаса не продолжаем
+                        alert('Доступ к компасу запрещен');
+                        return;
                     }
                 } catch (e) {
                     console.error(e);
-                    startBtn.textContent = 'Ошибка компаса';
-                    return;
                 }
             } else {
-                orientationGranted = true;
                 window.addEventListener('deviceorientation', handleOrientation, true);
             }
 
-            // 2. Запрос Геолокации
-            if (navigator.geolocation && orientationGranted) {
+            if (navigator.geolocation) {
                 navigator.geolocation.getCurrentPosition(
                     pos => {
                         userLat = pos.coords.latitude;
                         userLon = pos.coords.longitude;
                         reverseGeocode(userLat, userLon);
-                        startOverlay.classList.add('hidden'); // Убираем шторку
+                        startOverlay.classList.add('hidden');
                     },
                     err => {
-                        // Фолбэк если не дали локацию
                         userLat = 55.7558;
                         userLon = 37.6173;
-                        locationLabel.textContent = 'Демо: Москва';
+                        locationLabel.textContent = 'Москва (Демо)';
                         startOverlay.classList.add('hidden');
                     },
                     { enableHighAccuracy: true, timeout: 6000 }
@@ -346,7 +377,7 @@
             }
         });
 
-        // Астрономия (NOAA)
+        // Астрономия (NOAA Solar Algorithm)
         const toRad = d => d * Math.PI / 180;
         const toDeg = r => r * 180 / Math.PI;
         function getJulianDate(date) { return (date.getTime() / 1000 / 86400.0) + 2440587.5; }
@@ -379,6 +410,7 @@
         function findSolarPassage(targetAzimuth, lat, lon) {
             const now = new Date();
             const startJd = getJulianDate(now);
+
             for (let day = 0; day < 365; day++) {
                 const dayJd = startJd + day;
                 for (let h = 0; h < 24; h += 1) {
@@ -412,15 +444,16 @@
         }
 
         function formatResult(date) {
-            if (!date) return { dateStr: 'Вне орбиты', timeStr: '' };
+            if (!date) return { dateStr: 'Вне орбиты', timeStr: '—' };
             const diffDays = Math.floor((date.setHours(0,0,0,0) - new Date().setHours(0,0,0,0)) / 86400000);
             const timeStr = date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+
             if (diffDays === 0) return { dateStr: 'Сегодня', timeStr };
             if (diffDays === 1) return { dateStr: 'Завтра', timeStr };
             return { dateStr: date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' }), timeStr };
         }
 
-        // Логика компаса и UI
+        // Ориентация
         function handleOrientation(e) {
             let heading = e.webkitCompassHeading || (e.alpha !== null ? 360 - e.alpha : null);
             if (heading !== null) {
@@ -439,23 +472,33 @@
             compassSvg.style.transform = `rotate(${-unwrappedHeading}deg)`;
             sunMarker.style.transform = `translateX(-50%) rotate(${unwrappedHeading}deg)`;
 
+            // Автосброс при повороте телефона более чем на 2.5 градуса
+            if (isLocked && lastCalculatedHeading !== null) {
+                let delta = Math.abs(currentHeading - lastCalculatedHeading);
+                delta = Math.min(delta, 360 - delta);
+                if (delta > 2.5) {
+                    resetLock();
+                }
+            }
+        }
+
+        function resetLock() {
+            isLocked = false;
             compassViewport.classList.remove('locked');
             sunMarker.classList.remove('active');
             targetLine.classList.remove('active');
-
-            if (!isSearching) {
-                dateLabel.textContent = 'Наведитесь';
-                timeValue.textContent = '';
-                timeValue.classList.remove('dots');
-            }
-
-            clearTimeout(motionTimer);
-            motionTimer = setTimeout(executeSearch, 400);
+            calcBtn.classList.remove('active');
+            dateLabel.textContent = 'Наведитесь';
+            timeValue.textContent = '';
+            timeValue.classList.remove('dots');
         }
 
-        function executeSearch() {
-            if (userLat === null) return; // Теперь это не сработает вхолостую
-            isSearching = true;
+        function executeCalculation() {
+            if (userLat === null) return;
+
+            isLocked = true;
+            lastCalculatedHeading = currentHeading;
+
             dateLabel.textContent = '';
             timeValue.textContent = '···';
             timeValue.classList.add('dots');
@@ -463,18 +506,29 @@
             setTimeout(() => {
                 const passageDate = findSolarPassage(currentHeading, userLat, userLon);
                 const { dateStr, timeStr } = formatResult(passageDate);
+
                 dateLabel.textContent = dateStr;
                 timeValue.classList.remove('dots');
                 timeValue.textContent = timeStr;
 
-                if (passageDate) {
-                    compassViewport.classList.add('locked');
-                    sunMarker.classList.add('active');
-                    targetLine.classList.add('active');
-                }
-                isSearching = false;
-            }, 200);
+                compassViewport.classList.add('locked');
+                sunMarker.classList.add('active');
+                targetLine.classList.add('active');
+
+                calcBtn.classList.add('active');
+            }, 120);
         }
+
+        // События клика
+        calcBtn.addEventListener('click', () => {
+            if (isLocked) resetLock();
+            else executeCalculation();
+        });
+
+        compassViewport.addEventListener('click', () => {
+            if (isLocked) resetLock();
+            else executeCalculation();
+        });
 
         function reverseGeocode(lat, lon) {
             locationLabel.textContent = `${lat.toFixed(2)}°, ${lon.toFixed(2)}°`;
