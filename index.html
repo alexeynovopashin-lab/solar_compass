@@ -285,7 +285,7 @@
         <div class="location-name" id="locationLabel">Определение...</div>
     </div>
 
-    <div class="build-number">Build 1.1.3</div>
+    <div class="build-number">Build 1.1.4</div>
 
     <script>
         console.log('Script loaded successfully');
@@ -332,14 +332,18 @@
         let currentSunAzimuth = 0;
         let targetAzimuth = null;
 
-        // ==================== SUNCalc ====================
+        // ==================== SUNCalc (Исправленный расчёт азимута от Севера) ====================
         function getSolarPosition(date, lat, lon) {
             if (!lat || !lon || isNaN(lat) || isNaN(lon) || !window.SunCalc) 
                 return { azimuth: 0, altitude: -90 };
             try {
                 const pos = window.SunCalc.getPosition(date, lat, lon);
-                let azimuth = (pos.azimuth * 180 / Math.PI + 180) % 360;
-                const altitude = pos.altitude * 180 / Math.PI;
+                // SunCalc возвращает azimuth в радианах от юга (0 = S).
+                // Переводим в градусы и смещаем на 180°, чтобы получить навигационную шкалу от севера (0 = N).
+                let azimuth = (pos.azimuth * (180 / Math.PI) + 180) % 360;
+                azimuth = (azimuth + 360) % 360;
+                
+                const altitude = pos.altitude * (180 / Math.PI);
                 return { azimuth, altitude };
             } catch (e) {
                 console.error('SunCalc error:', e);
@@ -353,6 +357,7 @@
         };
 
         function setSvgDotPosition(dotElement, azimuth, radius) {
+            // Азимут 0 (Север) располагаем наверху экрана (-90 градусов в тригонометрии)
             const rad = (azimuth - 90) * Math.PI / 180;
             const cx = 150 + radius * Math.cos(rad);
             const cy = 150 + radius * Math.sin(rad);
