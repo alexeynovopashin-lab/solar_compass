@@ -285,7 +285,7 @@
         <div class="location-name" id="locationLabel">Определение...</div>
     </div>
 
-    <div class="build-number">Build 1.1.7</div>
+    <div class="build-number">Build 1.1.8</div>
 
     <script>
         console.log('Script loaded successfully');
@@ -337,7 +337,6 @@
                 return { azimuth: 0, altitude: -90 };
             try {
                 const pos = window.SunCalc.getPosition(date, lat, lon);
-                // Преобразование радиан -> градусы, перенос начала отсчёта с юга на север
                 let azimuth = (pos.azimuth * (180 / Math.PI) + 180) % 360;
                 azimuth = (azimuth + 360) % 360;
                 const altitude = pos.altitude * (180 / Math.PI);
@@ -367,13 +366,16 @@
             const pos = getSolarPosition(now, userLat, userLon);
             currentSunAzimuth = pos.azimuth;
 
-            // Прячем точку только после захода за гражданские сумерки (-6°)
+            // Всегда показываем точку, меняем только прозрачность
+            currentSunDot.style.display = 'block';
             if (pos.altitude <= -6) {
-                currentSunDot.style.display = 'none';
+                currentSunDot.setAttribute('opacity', '0.15');
+            } else if (pos.altitude < 0) {
+                currentSunDot.setAttribute('opacity', '0.4');
             } else {
-                currentSunDot.style.display = 'block';
-                setSvgDotPosition(currentSunDot, currentSunAzimuth, 100);
+                currentSunDot.setAttribute('opacity', '1');
             }
+            setSvgDotPosition(currentSunDot, currentSunAzimuth, 100);
         }
 
         function findSolarPassage(targetAzimuth, lat, lon) {
