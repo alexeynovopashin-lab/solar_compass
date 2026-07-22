@@ -284,9 +284,11 @@
         <div class="location-name" id="locationLabel">Определение...</div>
     </div>
 
-    <div class="build-number">Build 1.0.9</div>
+    <div class="build-number">Build 1.1.0</div>
 
     <script>
+        console.log('Script loaded successfully');
+
         // ==================== РЕНДЕР КОМПАСА ====================
         const ticksGroup = document.getElementById('ticksGroup');
         for (let i = 0; i < 360; i += 5) {
@@ -431,7 +433,6 @@
             calcBtn.classList.remove('active');
             dateLabel.textContent = '';
             
-            // Сразу отображаем текущие часы при сбросе
             updateClock();
             timeValue.classList.remove('dots');
         }
@@ -473,34 +474,69 @@
             }
         }
         setInterval(updateClock, 1000);
-        updateClock(); // Первоначальный вызов
+        updateClock(); 
 
         // ==================== Запуск ====================
         startBtn.addEventListener('click', async () => {
             startBtn.textContent = 'Подключение...';
             startBtn.style.pointerEvents = 'none';
+
+            let permissionGranted = true;
+
+            // 1. Запрос прав на ориентацию (iOS 13+)
             if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
                 try {
                     const state = await DeviceOrientationEvent.requestPermission();
-                    if (state === 'granted') window.addEventListener('deviceorientation', handleOrientation, true);
-                    else alert('Доступ к компасу запрещен');
-                } catch (e) { console.error(e); }
+                    if (state !== 'granted') {
+                        alert('Доступ к компасу запрещён. Приложение не сможет работать.');
+                        permissionGranted = false;
+                        startBtn.textContent = 'Включить компас';
+                        startBtn.style.pointerEvents = 'auto';
+                    } else {
+                        window.addEventListener('deviceorientation', handleOrientation, true);
+                    }
+                } catch (e) {
+                    console.error('Orientation permission error:', e);
+                    window.addEventListener('deviceorientation', handleOrientation, true); // fallback
+                }
             } else {
                 window.addEventListener('deviceorientation', handleOrientation, true);
             }
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(pos => {
-                    userLat = pos.coords.latitude;
-                    userLon = pos.coords.longitude;
-                    reverseGeocode(userLat, userLon);
-                    updateCurrentSunPosition();
-                    startOverlay.classList.add('hidden');
-                }, () => {
-                    userLat = 55.7558; userLon = 37.6173;
-                    locationLabel.textContent = 'Москва (Демо)';
-                    updateCurrentSunPosition();
-                    startOverlay.classList.add('hidden');
-                }, { enableHighAccuracy: true, timeout: 8000 });
+
+            // 2. Геолокация с надёжным обработчиком ошибок
+            if (navigator.geolocation && permissionGranted) {
+                navigator.geolocation.getCurrentPosition(
+                    // Успех
+                    pos => {
+                        userLat = pos.coords.latitude;
+                        userLon = pos.coords.longitude;
+                        reverseGeocode(userLat, userLon);
+                        updateCurrentSunPosition();
+                        startOverlay.classList.add('hidden');
+                    },
+                    // Ошибка
+                    err => {
+                        console.warn('Geolocation error:', err);
+                        userLat = 55.7558;
+                        userLon = 37.6173;
+                        locationLabel.textContent = 'Москва (Демо)';
+                        updateCurrentSunPosition();
+                        startOverlay.classList.add('hidden');
+                    },
+                    { 
+                        enableHighAccuracy: true, 
+                        timeout: 10000,
+                        maximumAge: 60000 
+                    }
+                );
+            } else if (!permissionGranted) {
+               // Кнопка уже сброшена выше, ничего не делаем
+            } else {
+                userLat = 55.7558;
+                userLon = 37.6173;
+                locationLabel.textContent = 'Москва (Демо)';
+                updateCurrentSunPosition();
+                startOverlay.classList.add('hidden');
             }
         });
 
