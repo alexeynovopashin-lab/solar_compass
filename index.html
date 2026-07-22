@@ -284,7 +284,7 @@
         <div class="location-name" id="locationLabel">Определение...</div>
     </div>
 
-    <div class="build-number">Build 1.1.0</div>
+    <div class="build-number">Build 1.1.1</div>
 
     <script>
         console.log('Script loaded successfully');
@@ -296,7 +296,7 @@
             const r1 = 140;
             const r2 = r1 - (isMajor ? 10 : 5);
             const rad = (i - 90) * Math.PI / 180;
-                        
+            
             const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
             line.setAttribute('x1', 150 + r1 * Math.cos(rad));
             line.setAttribute('y1', 150 + r1 * Math.sin(rad));
@@ -324,18 +324,24 @@
         let lastRawHeading = 0;
         let unwrappedHeading = 0;
         let isLocked = false;
+        let isCalculating = false;
+        let needSyncAfterUnlock = false;
         let currentSunAzimuth = 0;
         let targetAzimuth = null;
 
         // ==================== SUNCalc ====================
         function getSolarPosition(date, lat, lon) {
-            if (!lat || !lon) return { azimuth: 0, altitude: -90 };
-            const pos = SunCalc.getPosition(date, lat, lon);
-                        
-            let azimuth = pos.azimuth * (180 / Math.PI);
-            azimuth = (azimuth + 180) % 360;   
-            const altitude = pos.altitude * (180 / Math.PI);
-            return { azimuth, altitude };
+            if (!lat || !lon || isNaN(lat) || isNaN(lon)) 
+                return { azimuth: 0, altitude: -90 };
+            try {
+                const pos = SunCalc.getPosition(date, lat, lon);
+                let azimuth = (pos.azimuth * 180 / Math.PI + 180) % 360;
+                const altitude = pos.altitude * (180 / Math.PI);
+                return { azimuth, altitude };
+            } catch (e) {
+                console.error('SunCalc error:', e);
+                return { azimuth: 0, altitude: -90 };
+            }
         }
 
         const angDiff = (a, b) => {
@@ -356,6 +362,7 @@
             const now = new Date();
             const pos = getSolarPosition(now, userLat, userLon);
             currentSunAzimuth = pos.azimuth;
+
             if (pos.altitude <= 0.5) {
                 currentSunDot.style.display = 'none';
             } else {
@@ -367,7 +374,7 @@
         function findSolarPassage(targetAzimuth, lat, lon) {
             const now = new Date();
             let checkDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-            for (let day = 0; day < 10; day++) {
+            for (let day = 0; day < 30; day++) {
                 for (let min = 0; min < 1440; min += 5) {
                     const testDate = new Date(checkDate.getTime() + min * 60000);
                     if (testDate < now) continue;
@@ -398,11 +405,12 @@
             const dTarget = new Date(date); dTarget.setHours(0,0,0,0);
             const dNow = new Date(); dNow.setHours(0,0,0,0);
             const diffDays = Math.round((dTarget - dNow) / 86400000);
+
             if (diffDays === 0) return { dateStr: 'Сегодня', timeStr };
             if (diffDays === 1) return { dateStr: 'Завтра', timeStr };
-            return { 
-                dateStr: date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' }), 
-                timeStr 
+            return {
+                dateStr: date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' }),
+                timeStr
             };
         }
 
@@ -410,54 +418,72 @@
         function handleOrientation(e) {
             let heading = e.webkitCompassHeading || (e.alpha !== null ? 360 - e.alpha : null);
             if (heading !== null) {
-                requestAnimationFrame(() => onHeadingChange((heading + 360) % 360));
+                requestAnimationFrame(() => {
+                    if (needSyncAfterUnlock) {
+                        unwrappedHeading = heading;
+                        lastRawHeading = heading;
+                        needSyncAfterUnlock = false;
+                    }
+                    onHeadingChange(heading);
+                });
             }
         }
 
         function onHeadingChange(heading) {
             if (isLocked) return;
+
             let diff = heading - lastRawHeading;
             if (diff < -180) diff += 360;
             if (diff > 180) diff -= 360;
             unwrappedHeading += diff;
             lastRawHeading = heading;
             currentHeading = heading;
+
             compassSvg.style.transform = `rotate(${-unwrappedHeading}deg)`;
         }
 
         function resetLock() {
             isLocked = false;
+            isCalculating = false;
             targetAzimuth = null;
+            needSyncAfterUnlock = true;
             compassViewport.classList.remove('locked');
             targetSunDot.style.display = 'none';
             calcBtn.classList.remove('active');
             dateLabel.textContent = '';
-            
             updateClock();
             timeValue.classList.remove('dots');
         }
 
         function executeCalculation() {
-            if (userLat === null) return;
+            if (userLat === null || isCalculating || isLocked) return;
+            isCalculating = true;
             isLocked = true;
             targetAzimuth = currentHeading;
+
             dateLabel.textContent = '';
             timeValue.textContent = '···';
             timeValue.classList.add('dots');
+
             setTimeout(() => {
                 const passageDate = findSolarPassage(targetAzimuth, userLat, userLon);
                 const { dateStr, timeStr } = formatResult(passageDate);
+
                 dateLabel.textContent = dateStr;
                 timeValue.classList.remove('dots');
                 timeValue.textContent = timeStr;
+
                 setSvgDotPosition(targetSunDot, targetAzimuth, 140);
                 targetSunDot.style.display = 'block';
+
                 compassViewport.classList.add('locked');
                 calcBtn.classList.add('active');
+                isCalculating = false;
             }, 80);
         }
 
         function toggleLock() {
+            if (isCalculating) return;
             if (isLocked) resetLock();
             else executeCalculation();
         }
@@ -466,15 +492,14 @@
         function updateClock() {
             if (!isLocked) {
                 const now = new Date();
-                const timeStr = now.toLocaleTimeString('ru-RU', { 
-                    hour: '2-digit', 
-                    minute: '2-digit' 
+                const timeStr = now.toLocaleTimeString('ru-RU', {
+                    hour: '2-digit', minute: '2-digit'
                 }).replace(':', ' ');
                 timeValue.textContent = timeStr;
             }
         }
         setInterval(updateClock, 1000);
-        updateClock(); 
+        updateClock();
 
         // ==================== Запуск ====================
         startBtn.addEventListener('click', async () => {
@@ -483,7 +508,6 @@
 
             let permissionGranted = true;
 
-            // 1. Запрос прав на ориентацию (iOS 13+)
             if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
                 try {
                     const state = await DeviceOrientationEvent.requestPermission();
@@ -497,16 +521,14 @@
                     }
                 } catch (e) {
                     console.error('Orientation permission error:', e);
-                    window.addEventListener('deviceorientation', handleOrientation, true); // fallback
+                    window.addEventListener('deviceorientation', handleOrientation, true);
                 }
             } else {
                 window.addEventListener('deviceorientation', handleOrientation, true);
             }
 
-            // 2. Геолокация с надёжным обработчиком ошибок
             if (navigator.geolocation && permissionGranted) {
                 navigator.geolocation.getCurrentPosition(
-                    // Успех
                     pos => {
                         userLat = pos.coords.latitude;
                         userLon = pos.coords.longitude;
@@ -514,7 +536,6 @@
                         updateCurrentSunPosition();
                         startOverlay.classList.add('hidden');
                     },
-                    // Ошибка
                     err => {
                         console.warn('Geolocation error:', err);
                         userLat = 55.7558;
@@ -523,17 +544,12 @@
                         updateCurrentSunPosition();
                         startOverlay.classList.add('hidden');
                     },
-                    { 
-                        enableHighAccuracy: true, 
-                        timeout: 10000,
-                        maximumAge: 60000 
-                    }
+                    { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
                 );
             } else if (!permissionGranted) {
-               // Кнопка уже сброшена выше, ничего не делаем
+                // Кнопка сброшена выше
             } else {
-                userLat = 55.7558;
-                userLon = 37.6173;
+                userLat = 55.7558; userLon = 37.6173;
                 locationLabel.textContent = 'Москва (Демо)';
                 updateCurrentSunPosition();
                 startOverlay.classList.add('hidden');
@@ -542,16 +558,19 @@
 
         function reverseGeocode(lat, lon) {
             locationLabel.textContent = `${lat.toFixed(2)}°, ${lon.toFixed(2)}°`;
-            fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&accept-language=ru`)
-                .then(r => r.json())
-                .then(data => {
-                    const city = data.address.city || data.address.town || data.address.settlement || data.address.country;
-                    if (city) locationLabel.textContent = city;
-                }).catch(() => {});
+            fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&accept-language=ru`, {
+                headers: { 'User-Agent': 'SolarCompass/1.0 (https://github.com/alexeynovopashin-lab/solar_compass)' }
+            })
+            .then(r => r.json())
+            .then(data => {
+                const city = data.address.city || data.address.town || data.address.settlement || data.address.country;
+                if (city) locationLabel.textContent = city;
+            }).catch(() => {});
         }
 
         calcBtn.addEventListener('click', toggleLock);
         compassViewport.addEventListener('click', toggleLock);
+
         setInterval(updateCurrentSunPosition, 20000);
     </script>
 </body>
