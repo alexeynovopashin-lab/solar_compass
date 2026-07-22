@@ -144,7 +144,6 @@
             transform: scale(1.04);
         }
 
-        /* Верхняя визирная риска (прицел направления телефона) */
         .viewport-notch {
             position: absolute;
             top: 0;
@@ -260,29 +259,23 @@
         <div class="time-value" id="timeValue"></div>
     </div>
 
-    <!-- Компас (2D Проекция) -->
+    <!-- Компас -->
     <div class="compass-viewport" id="compassViewport">
         <div class="viewport-notch"></div>
         <div class="center-dot"></div>
         
         <svg class="compass-svg" id="compassSvg" viewBox="0 0 300 300">
-            <!-- Внешнее кольцо компаса -->
             <circle cx="150" cy="150" r="140" stroke="rgba(255,255,255,0.08)" stroke-width="1" fill="none"/>
-            <!-- Внутреннее орбитальное кольцо -->
             <circle cx="150" cy="150" r="100" stroke="rgba(255,255,255,0.1)" stroke-width="1" stroke-dasharray="2 4" fill="none"/>
             
             <g id="ticksGroup"></g>
 
-            <!-- Стороны света -->
             <text x="150" y="28" fill="#ffd25f" font-size="12" font-weight="600" text-anchor="middle">N</text>
             <text x="272" y="154" fill="rgba(255,255,255,0.4)" font-size="12" font-weight="500" text-anchor="middle">E</text>
             <text x="150" y="280" fill="rgba(255,255,255,0.4)" font-size="12" font-weight="500" text-anchor="middle">S</text>
             <text x="28" y="154" fill="rgba(255,255,255,0.4)" font-size="12" font-weight="500" text-anchor="middle">W</text>
 
-            <!-- Точка текущего солнца (на внутреннем кольце r=100) -->
             <circle id="currentSunDot" cx="150" cy="50" r="5" fill="#ffffff" filter="drop-shadow(0 0 6px rgba(255,255,255,0.9))" style="display: none;" />
-
-            <!-- Точка целевого солнца (при замере на внешнем кольце r=140) -->
             <circle id="targetSunDot" cx="150" cy="10" r="7" fill="var(--accent-sun)" filter="drop-shadow(0 0 10px var(--accent-sun))" style="display: none;" />
         </svg>
     </div>
@@ -295,7 +288,7 @@
         <div class="location-name" id="locationLabel">Определение...</div>
     </div>
 
-    <div class="build-number">Build 1.0.5</div>
+    <div class="build-number">Build 1.0.6</div>
 
     <script>
         // 1. Рендер рисок компаса
@@ -336,7 +329,6 @@
         let currentSunAzimuth = 0;
         let targetAzimuth = null;
 
-        // 2. Инициализация (iOS PWA)
         startBtn.addEventListener('click', async () => {
             startBtn.textContent = 'Подключение...';
             startBtn.style.pointerEvents = 'none';
@@ -378,7 +370,6 @@
             }
         });
 
-        // 3. Астрономия и Математика
         const toRad = d => d * Math.PI / 180;
         const toDeg = r => r * 180 / Math.PI;
         
@@ -414,7 +405,6 @@
             return { azimuth: (azimuth + 360) % 360, altitude };
         }
 
-        // Позиционирование точки на 2D плоскости SVG по азимуту и радиусу
         function setSvgDotPosition(dotElement, azimuth, radius) {
             const rad = (azimuth - 90) * Math.PI / 180;
             const cx = 150 + radius * Math.cos(rad);
@@ -434,10 +424,11 @@
                 currentSunDot.style.display = 'none';
             } else {
                 currentSunDot.style.display = 'block';
-                setSvgDotPosition(currentSunDot, currentSunAzimuth, 100); // Радиус внутреннего кольца = 100
+                setSvgDotPosition(currentSunDot, currentSunAzimuth, 100);
             }
         }
 
+        // Умный поиск будущего времени (с учетом уже прошедших часов сегодня)
         function findSolarPassage(tAzimuth, lat, lon) {
             const now = new Date();
             const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -464,7 +455,12 @@
                                     bestJd = minuteJd;
                                 }
                             }
-                            return new Date((bestJd - 2440587.5) * 86400 * 1000);
+                            const passageDate = new Date((bestJd - 2440587.5) * 86400 * 1000);
+                            
+                            // БЕРЕМ ТОЛЬКО БУДУЩЕЕ ВРЕМЯ (прошедшие часы сегодня игнорируются)
+                            if (passageDate > now) {
+                                return passageDate;
+                            }
                         }
                     }
                 }
@@ -489,7 +485,6 @@
             return { dateStr: date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' }), timeStr };
         }
 
-        // 4. Логика компаса
         function handleOrientation(e) {
             let heading = e.webkitCompassHeading || (e.alpha !== null ? 360 - e.alpha : null);
             if (heading !== null) {
@@ -507,7 +502,6 @@
             lastRawHeading = heading;
             currentHeading = heading;
 
-            // Вращаем весь 2D диск компаса
             compassSvg.style.transform = `rotate(${-unwrappedHeading}deg)`;
         }
 
@@ -525,7 +519,7 @@
         function executeCalculation() {
             if (userLat === null) return;
             isLocked = true;
-            targetAzimuth = currentHeading; // Фиксируем то азимутальное направление, куда смотрит телефон
+            targetAzimuth = currentHeading;
 
             dateLabel.textContent = '';
             timeValue.textContent = '···';
@@ -539,7 +533,6 @@
                 timeValue.classList.remove('dots');
                 timeValue.textContent = timeStr;
 
-                // Отображаем целевое солнце на внешнем кольце (радиус 140)
                 setSvgDotPosition(targetSunDot, targetAzimuth, 140);
                 targetSunDot.style.display = 'block';
 
