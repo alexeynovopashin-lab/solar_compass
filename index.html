@@ -285,7 +285,7 @@
         <div class="location-name" id="locationLabel">Определение...</div>
     </div>
 
-    <div class="build-number">Build 1.1.8</div>
+    <div class="build-number">Build 1.1.9</div>
 
     <script>
         console.log('Script loaded successfully');
@@ -331,15 +331,21 @@
         let currentSunAzimuth = 0;
         let targetAzimuth = null;
 
-        // ==================== SUNCalc ====================
+        // ==================== SUNCalc (Исправленная система отсчёта) ====================
         function getSolarPosition(date, lat, lon) {
-            if (!lat || !lon || isNaN(lat) || isNaN(lon) || !window.SunCalc) 
+            if (!lat || !lon || isNaN(lat) || isNaN(lon) || !window.SunCalc)
                 return { azimuth: 0, altitude: -90 };
+
             try {
                 const pos = window.SunCalc.getPosition(date, lat, lon);
-                let azimuth = (pos.azimuth * (180 / Math.PI) + 180) % 360;
-                azimuth = (azimuth + 360) % 360;
+                
+                // КРИТИЧЕСКАЯ КОРРЕКЦИЯ:
+                // SunCalc azimuth: 0 = South, clockwise
+                let azimuth = pos.azimuth * (180 / Math.PI);           // радианы → градусы
+                azimuth = (azimuth + 180) % 360;                       // South → North
+                
                 const altitude = pos.altitude * (180 / Math.PI);
+                
                 return { azimuth, altitude };
             } catch (e) {
                 console.error('SunCalc error:', e);
@@ -378,19 +384,23 @@
             setSvgDotPosition(currentSunDot, currentSunAzimuth, 100);
         }
 
+        // ==================== Поиск с ослабленными допусками ====================
         function findSolarPassage(targetAzimuth, lat, lon) {
             const now = new Date();
             let checkDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
             for (let day = 0; day < 40; day++) {
-                for (let min = 0; min < 1440; min += 4) {
+                for (let min = 0; min < 1440; min += 3) {           // шаг 3 минуты
                     const testDate = new Date(checkDate.getTime() + min * 60000);
                     if (testDate < now) continue;
 
                     const pos = getSolarPosition(testDate, lat, lon);
-                    if (angDiff(pos.azimuth, targetAzimuth) < 3.5) {
+                    
+                    if (angDiff(pos.azimuth, targetAzimuth) < 5) {   // ослабили до 5°
+                        // точная подгонка
                         let bestDate = testDate;
                         let minDiff = Infinity;
-                        for (let f = -15; f <= 15; f++) {
+                        for (let f = -20; f <= 20; f += 1) {
                             const fineDate = new Date(testDate.getTime() + f * 60000);
                             const fPos = getSolarPosition(fineDate, lat, lon);
                             const diff = angDiff(fPos.azimuth, targetAzimuth);
