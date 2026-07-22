@@ -389,11 +389,13 @@
             
             <g id="ticksGroup"></g>
 
-            <text x="170" y="32" fill="#ffd25f" font-size="14" font-weight="600" text-anchor="middle">N</text>
-            <text x="316" y="174" fill="rgba(255,255,255,0.4)" font-size="14" font-weight="500" text-anchor="middle">E</text>
-            <text x="170" y="320" fill="rgba(255,255,255,0.4)" font-size="14" font-weight="500" text-anchor="middle">S</text>
-            <text x="24" y="174" fill="rgba(255,255,255,0.4)" font-size="14" font-weight="500" text-anchor="middle">W</text>
+            <!-- Буквы сторон света сдвинуты дальше от делений (радиус 155) -->
+            <text x="170" y="15" fill="#ffd25f" font-size="14" font-weight="600" text-anchor="middle">N</text>
+            <text x="325" y="174" fill="rgba(255,255,255,0.4)" font-size="14" font-weight="500" text-anchor="middle">E</text>
+            <text x="170" y="325" fill="rgba(255,255,255,0.4)" font-size="14" font-weight="500" text-anchor="middle">S</text>
+            <text x="15" y="174" fill="rgba(255,255,255,0.4)" font-size="14" font-weight="500" text-anchor="middle">W</text>
 
+            <!-- Начальные позиции точек солнца (будут обновлены скриптом) -->
             <circle id="currentSunDot" cx="170" cy="50" r="5" fill="#ffffff" filter="drop-shadow(0 0 6px rgba(255,255,255,0.9))" style="display: none;" />
             <circle id="targetSunDot" cx="170" cy="10" r="7" fill="#ffd25f" filter="drop-shadow(0 0 10px #ffd25f)" style="display: none;" />
         </svg>
@@ -406,13 +408,13 @@
         <div class="location-name" id="locationLabel">Определение...</div>
     </div>
 
-    <div class="build-number">Build 1.2.2</div>
+    <div class="build-number">Build 1.2.3</div>
 
     <script>
         console.log('Script loaded successfully');
         console.log('SunCalc defined:', !!window.SunCalc);
 
-        // ==================== РЕНДЕР КОМПАСА (ИСПРАВЛЕННЫЙ ЦЕНТР 170) ====================
+        // ==================== РЕНДЕР КОМПАСА (ЦЕНТР 170, РАДИУСЫ 160/115) ====================
         const ticksGroup = document.getElementById('ticksGroup');
         const cx = 170, cy = 170;
         const r1 = 160;
@@ -481,10 +483,10 @@
 
         function setSvgDotPosition(dotElement, azimuth, radius) {
             const rad = (azimuth - 90) * Math.PI / 180;
-            const dcx = 170 + radius * Math.cos(rad);
-            const dcy = 170 + radius * Math.sin(rad);
-            dotElement.setAttribute('cx', dcx);
-            dotElement.setAttribute('cy', dcy);
+            const dotCx = 170 + radius * Math.cos(rad);
+            const dotCy = 170 + radius * Math.sin(rad);
+            dotElement.setAttribute('cx', dotCx);
+            dotElement.setAttribute('cy', dotCy);
         }
 
         function updateCurrentSunPosition() {
@@ -501,7 +503,8 @@
             } else {
                 currentSunDot.setAttribute('opacity', '1');
             }
-            setSvgDotPosition(currentSunDot, currentSunAzimuth, 100);
+            // Точка текущего солнца теперь на пунктирной окружности (радиус 115)
+            setSvgDotPosition(currentSunDot, currentSunAzimuth, 115);
         }
 
         function findSolarPassage(targetAzimuth, lat, lon) {
@@ -611,6 +614,7 @@
                 timeValue.classList.remove('dots');
                 timeValue.textContent = timeStr;
 
+                // Целевая точка — на внешнем круге (радиус 140)
                 setSvgDotPosition(targetSunDot, targetAzimuth, 140);
                 targetSunDot.style.display = 'block';
 
