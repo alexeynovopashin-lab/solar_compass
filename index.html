@@ -366,13 +366,105 @@
             letter-spacing: 0.5px;
             pointer-events: none;
         }
+
+        /* Переключатель темы */
+        .theme-toggle {
+            position: absolute;
+            top: calc(env(safe-area-inset-top) + 20px);
+            right: 20px;
+            z-index: 10;
+            background: var(--surface);
+            border: 1px solid var(--surface-border);
+            color: var(--text-primary);
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            font-size: 18px;
+            transition: background 0.2s, transform 0.2s;
+        }
+        .theme-toggle:active {
+            transform: scale(0.93);
+        }
+
+        /* Светлая тема */
+        body.light {
+            --bg: #f5f5f7;
+            --text-primary: #1d1d1f;
+            --text-secondary: rgba(0,0,0,0.5);
+            --surface: rgba(0,0,0,0.04);
+            --surface-border: rgba(0,0,0,0.15);
+            --accent-sun: #f0a500;
+            --accent-glow: rgba(240,165,0,0.4);
+        }
+        body.light .compass-svg text,
+        body.light .viewport-notch {
+            filter: none;
+        }
+        body.light .shutter-inner {
+            background: #1d1d1f;
+        }
+        body.light .shutter-btn {
+            border-color: rgba(0,0,0,0.6);
+        }
+
+        /* Онбординг */
+        .onboarding-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.85);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            z-index: 200;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: opacity 0.5s ease;
+        }
+        .onboarding-overlay.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+        .onboarding-card {
+            background: var(--bg);
+            color: var(--text-primary);
+            padding: 32px 28px;
+            border-radius: 28px;
+            text-align: center;
+            max-width: 280px;
+            font-size: 16px;
+            line-height: 1.5;
+        }
+        .onboarding-card p {
+            margin-bottom: 20px;
+        }
     </style>
 </head>
 <body>
 
+    <!-- Онбординг -->
+    <div class="onboarding-overlay" id="onboardingOverlay">
+        <div class="onboarding-card">
+            <p>☀️ Направьте телефон в интересующую сторону</p>
+            <p>📸 Нажмите кнопку — узнаете, когда там будет солнце</p>
+            <button class="start-btn" id="onboardingBtn">Понятно</button>
+        </div>
+    </div>
+
+    <!-- Стартовый оверлей -->
     <div class="start-overlay" id="startOverlay">
         <button class="start-btn" id="startBtn">Включить компас</button>
     </div>
+
+    <!-- Кнопка темы -->
+    <button class="theme-toggle" id="themeToggle" aria-label="Переключить тему">
+        <span class="theme-icon">☀️</span>
+    </button>
 
     <div class="display-header">
         <div class="date-label" id="dateLabel"></div>
@@ -389,13 +481,12 @@
             
             <g id="ticksGroup"></g>
 
-            <!-- Буквы сторон света сдвинуты дальше от делений (радиус 155) -->
-            <text x="170" y="15" fill="#ffd25f" font-size="14" font-weight="600" text-anchor="middle">N</text>
-            <text x="325" y="174" fill="rgba(255,255,255,0.4)" font-size="14" font-weight="500" text-anchor="middle">E</text>
-            <text x="170" y="325" fill="rgba(255,255,255,0.4)" font-size="14" font-weight="500" text-anchor="middle">S</text>
-            <text x="15" y="174" fill="rgba(255,255,255,0.4)" font-size="14" font-weight="500" text-anchor="middle">W</text>
+            <!-- Буквы сдвинуты на радиус 162, чтобы не перекрывать деления -->
+            <text x="170" y="8" fill="#ffd25f" font-size="14" font-weight="600" text-anchor="middle">N</text>
+            <text x="332" y="174" fill="rgba(255,255,255,0.4)" font-size="14" font-weight="500" text-anchor="middle">E</text>
+            <text x="170" y="332" fill="rgba(255,255,255,0.4)" font-size="14" font-weight="500" text-anchor="middle">S</text>
+            <text x="8" y="174" fill="rgba(255,255,255,0.4)" font-size="14" font-weight="500" text-anchor="middle">W</text>
 
-            <!-- Начальные позиции точек солнца (будут обновлены скриптом) -->
             <circle id="currentSunDot" cx="170" cy="50" r="5" fill="#ffffff" filter="drop-shadow(0 0 6px rgba(255,255,255,0.9))" style="display: none;" />
             <circle id="targetSunDot" cx="170" cy="10" r="7" fill="#ffd25f" filter="drop-shadow(0 0 10px #ffd25f)" style="display: none;" />
         </svg>
@@ -408,13 +499,13 @@
         <div class="location-name" id="locationLabel">Определение...</div>
     </div>
 
-    <div class="build-number">Build 1.2.3</div>
+    <div class="build-number">Build 1.3.0</div>
 
     <script>
         console.log('Script loaded successfully');
         console.log('SunCalc defined:', !!window.SunCalc);
 
-        // ==================== РЕНДЕР КОМПАСА (ЦЕНТР 170, РАДИУСЫ 160/115) ====================
+        // ==================== РЕНДЕР КОМПАСА ====================
         const ticksGroup = document.getElementById('ticksGroup');
         const cx = 170, cy = 170;
         const r1 = 160;
@@ -446,6 +537,10 @@
         const calcBtn = document.getElementById('calcBtn');
         const startOverlay = document.getElementById('startOverlay');
         const startBtn = document.getElementById('startBtn');
+        const onboardingOverlay = document.getElementById('onboardingOverlay');
+        const onboardingBtn = document.getElementById('onboardingBtn');
+        const themeToggle = document.getElementById('themeToggle');
+        const themeIcon = themeToggle.querySelector('.theme-icon');
 
         let userLat = null;
         let userLon = null;
@@ -457,6 +552,7 @@
         let needSyncAfterUnlock = false;
         let currentSunAzimuth = 0;
         let targetAzimuth = null;
+        let animationFrameId = null;
 
         // ==================== SUNCalc ====================
         function getSolarPosition(date, lat, lon) {
@@ -503,7 +599,6 @@
             } else {
                 currentSunDot.setAttribute('opacity', '1');
             }
-            // Точка текущего солнца теперь на пунктирной окружности (радиус 115)
             setSvgDotPosition(currentSunDot, currentSunAzimuth, 115);
         }
 
@@ -538,8 +633,8 @@
             return null;
         }
 
-        function formatResult(date) {
-            if (!date) return { dateStr: 'Не найдено в ближайшие 40 дней', timeStr: '—' };
+        function formatResult(date, lat, lon) {
+            if (!date) return { dateStr: 'Не найдено в ближайшие 40 дней', timeStr: '—', special: '' };
 
             const timeStr = date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
             const dTarget = new Date(date); dTarget.setHours(0,0,0,0);
@@ -551,7 +646,18 @@
             else if (diffDays === 1) dateStr = 'Завтра';
             else dateStr = date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
 
-            return { dateStr, timeStr };
+            // Проверка золотого/синего часа
+            let special = '';
+            if (lat && lon) {
+                const times = window.SunCalc.getTimes(date, lat, lon);
+                if (times.sunsetStart && times.goldenHourEnd && date >= times.sunsetStart && date <= times.goldenHourEnd) {
+                    special = ' • Золотой час';
+                } else if (times.sunset && times.dusk && date >= times.sunset && date <= times.dusk) {
+                    special = ' • Синий час';
+                }
+            }
+
+            return { dateStr, timeStr, special };
         }
 
         // ==================== Компас и сенсоры ====================
@@ -594,6 +700,10 @@
             updateClock();
             timeValue.classList.remove('dots');
             updateCurrentSunPosition();
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+                animationFrameId = null;
+            }
         }
 
         function executeCalculation() {
@@ -608,15 +718,31 @@
 
             setTimeout(() => {
                 const passageDate = findSolarPassage(targetAzimuth, userLat, userLon);
-                const { dateStr, timeStr } = formatResult(passageDate);
+                const { dateStr, timeStr, special } = formatResult(passageDate, userLat, userLon);
 
-                dateLabel.textContent = dateStr;
+                dateLabel.textContent = dateStr + special;
                 timeValue.classList.remove('dots');
                 timeValue.textContent = timeStr;
 
-                // Целевая точка — на внешнем круге (радиус 140)
-                setSvgDotPosition(targetSunDot, targetAzimuth, 140);
+                // Анимация выезда целевой точки из центра
                 targetSunDot.style.display = 'block';
+                setSvgDotPosition(targetSunDot, targetAzimuth, 0);
+                const startTime = performance.now();
+                const duration = 400;
+
+                function animateTargetDot(now) {
+                    const elapsed = now - startTime;
+                    const progress = Math.min(elapsed / duration, 1);
+                    const easeOut = 1 - Math.pow(1 - progress, 3);
+                    const currentRadius = easeOut * 140;
+                    setSvgDotPosition(targetSunDot, targetAzimuth, currentRadius);
+                    if (progress < 1) {
+                        animationFrameId = requestAnimationFrame(animateTargetDot);
+                    } else {
+                        animationFrameId = null;
+                    }
+                }
+                animationFrameId = requestAnimationFrame(animateTargetDot);
 
                 compassViewport.classList.add('locked');
                 calcBtn.classList.add('active');
@@ -652,7 +778,45 @@
         setInterval(updateClock, 1000);
         updateClock();
 
-        // ==================== Запуск с защитой от зависания ====================
+        // ==================== Тема ====================
+        function applyTheme(mode) {
+            if (mode === 'light') {
+                document.body.classList.add('light');
+                themeIcon.textContent = '🌙';
+                localStorage.setItem('theme', 'light');
+            } else {
+                document.body.classList.remove('light');
+                themeIcon.textContent = '☀️';
+                localStorage.setItem('theme', 'dark');
+            }
+        }
+
+        const savedTheme = localStorage.getItem('theme');
+        if (savedTheme === 'light') {
+            applyTheme('light');
+        } else {
+            applyTheme('dark');
+        }
+
+        themeToggle.addEventListener('click', () => {
+            const isLight = document.body.classList.contains('light');
+            applyTheme(isLight ? 'dark' : 'light');
+        });
+
+        // ==================== Онбординг ====================
+        if (!localStorage.getItem('onboarding_done')) {
+            startOverlay.style.display = 'none';
+        } else {
+            onboardingOverlay.style.display = 'none';
+        }
+
+        onboardingBtn.addEventListener('click', () => {
+            onboardingOverlay.classList.add('hidden');
+            startOverlay.style.display = 'flex';
+            localStorage.setItem('onboarding_done', '1');
+        });
+
+        // ==================== Запуск ====================
         startBtn.addEventListener('click', async () => {
             startBtn.textContent = 'Подключение...';
             startBtn.style.pointerEvents = 'none';
