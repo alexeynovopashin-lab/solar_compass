@@ -10,7 +10,7 @@
     <meta name="theme-color" content="#050505">
     <link rel="apple-touch-icon" href="icon-192.png">
 
-    <!-- Полный исходник SunCalc 2.0.1 (MIT) – без минификации, чтобы исключить ошибки сжатия -->
+    <!-- Полный исходник SunCalc 2.0.1 (MIT) -->
     <script>
         (function () {
             'use strict';
@@ -31,8 +31,7 @@
             function fromJulian(j) { return new Date((j + 0.5 - J1970) * dayMs); }
             function toDays(date) { return toJulian(date) - J2000; }
 
-            // general calculations for position
-            var e = rad * 23.4397; // obliquity of the Earth
+            var e = rad * 23.4397;
 
             function rightAscension(l, b) { return atan2(sin(l) * cos(e) - tan(b) * sin(e), cos(l)); }
             function declination(l, b) { return asin(sin(b) * cos(e) + cos(b) * sin(e) * sin(l)); }
@@ -47,11 +46,10 @@
                 return 0.0002967 / tan(h + 0.00312536 / (h + 0.08901179));
             }
 
-            // general sun calculations
             function solarMeanAnomaly(d) { return rad * (357.5291 + 0.98560028 * d); }
             function eclipticLongitude(M) {
                 var C = rad * (1.9148 * sin(M) + 0.02 * sin(2 * M) + 0.0003 * sin(3 * M));
-                var P = rad * 102.9372; // perihelion of the Earth
+                var P = rad * 102.9372;
                 return M + C + P + PI;
             }
 
@@ -64,10 +62,8 @@
                 };
             }
 
-            // SunCalc interface
             var SunCalc = {};
 
-            // calculates sun position for a given date and latitude/longitude
             SunCalc.getPosition = function (date, lat, lng) {
                 var lw = rad * -lng,
                     phi = rad * lat,
@@ -81,7 +77,6 @@
                 };
             };
 
-            // sun times configuration (angle, morning name, evening name)
             var times = [
                 [-0.833, 'sunrise', 'sunset'],
                 [-0.3, 'sunriseEnd', 'sunsetStart'],
@@ -91,12 +86,10 @@
                 [6, 'goldenHourEnd', 'goldenHour']
             ];
 
-            // adds a custom time to the times config
             SunCalc.addTime = function (angle, riseName, setName) {
                 times.push([angle, riseName, setName]);
             };
 
-            // calculations for sun times
             var J0 = 0.0009;
 
             function julianCycle(d, lw) { return Math.round(d - J0 - lw / (2 * PI)); }
@@ -110,7 +103,6 @@
                 return solarTransitJ(a, M, L);
             }
 
-            // calculates sun times for a given date and latitude/longitude
             SunCalc.getTimes = function (date, lat, lng) {
                 var lw = rad * -lng,
                     phi = rad * lat,
@@ -129,18 +121,14 @@
 
                 for (i = 0, len = times.length; i < len; i += 1) {
                     time = times[i];
-
                     Jset = getSetJ(time[0] * rad, lw, phi, dec, n, M, L);
                     Jrise = Jnoon - (Jset - Jnoon);
-
                     result[time[1]] = fromJulian(Jrise);
                     result[time[2]] = fromJulian(Jset);
                 }
-
                 return result;
             };
 
-            // export
             window.SunCalc = SunCalc;
         }());
     </script>
@@ -178,8 +166,8 @@
         body::before {
             content: "";
             position: absolute;
-            width: 380px;
-            height: 380px;
+            width: 420px;
+            height: 420px;
             background: radial-gradient(circle, rgba(255, 210, 95, 0.05) 0%, rgba(0,0,0,0) 70%);
             top: 45%;
             left: 50%;
@@ -253,6 +241,7 @@
             font-variant-numeric: tabular-nums;
             margin-top: 4px;
             min-height: 72px;
+            transition: opacity 0.3s ease, transform 0.3s ease;
         }
 
         .time-value.dots {
@@ -265,8 +254,8 @@
         .compass-viewport {
             position: relative;
             z-index: 1;
-            width: 300px;
-            height: 300px;
+            width: 340px;
+            height: 340px;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -395,15 +384,15 @@
         <div class="center-dot"></div>
         
         <svg class="compass-svg" id="compassSvg" viewBox="0 0 300 300">
-            <circle cx="150" cy="150" r="140" stroke="rgba(255,255,255,0.08)" stroke-width="1" fill="none"/>
-            <circle cx="150" cy="150" r="100" stroke="rgba(255,255,255,0.1)" stroke-width="1" stroke-dasharray="2 4" fill="none"/>
+            <circle cx="150" cy="150" r="160" stroke="rgba(255,255,255,0.08)" stroke-width="1" fill="none"/>
+            <circle cx="150" cy="150" r="115" stroke="rgba(255,255,255,0.1)" stroke-width="1" stroke-dasharray="2 4" fill="none"/>
             
             <g id="ticksGroup"></g>
 
-            <text x="150" y="28" fill="#ffd25f" font-size="12" font-weight="600" text-anchor="middle">N</text>
-            <text x="272" y="154" fill="rgba(255,255,255,0.4)" font-size="12" font-weight="500" text-anchor="middle">E</text>
-            <text x="150" y="280" fill="rgba(255,255,255,0.4)" font-size="12" font-weight="500" text-anchor="middle">S</text>
-            <text x="28" y="154" fill="rgba(255,255,255,0.4)" font-size="12" font-weight="500" text-anchor="middle">W</text>
+            <text x="150" y="24" fill="#ffd25f" font-size="14" font-weight="600" text-anchor="middle">N</text>
+            <text x="298" y="154" fill="rgba(255,255,255,0.4)" font-size="14" font-weight="500" text-anchor="middle">E</text>
+            <text x="150" y="290" fill="rgba(255,255,255,0.4)" font-size="14" font-weight="500" text-anchor="middle">S</text>
+            <text x="2" y="154" fill="rgba(255,255,255,0.4)" font-size="14" font-weight="500" text-anchor="middle">W</text>
 
             <circle id="currentSunDot" cx="150" cy="50" r="5" fill="#ffffff" filter="drop-shadow(0 0 6px rgba(255,255,255,0.9))" style="display: none;" />
             <circle id="targetSunDot" cx="150" cy="10" r="7" fill="#ffd25f" filter="drop-shadow(0 0 10px #ffd25f)" style="display: none;" />
@@ -417,18 +406,18 @@
         <div class="location-name" id="locationLabel">Определение...</div>
     </div>
 
-    <div class="build-number">Build 1.2.0</div>
+    <div class="build-number">Build 1.2.1</div>
 
     <script>
         console.log('Script loaded successfully');
         console.log('SunCalc defined:', !!window.SunCalc);
 
-        // ==================== РЕНДЕР КОМПАСА ====================
+        // ==================== РЕНДЕР КОМПАСА (УВЕЛИЧЕННЫЕ РАДИУСЫ) ====================
         const ticksGroup = document.getElementById('ticksGroup');
         for (let i = 0; i < 360; i += 5) {
             const isMajor = i % 30 === 0;
-            const r1 = 140;
-            const r2 = r1 - (isMajor ? 10 : 5);
+            const r1 = 160;                          // внешний радиус увеличен
+            const r2 = r1 - (isMajor ? 12 : 6);     // длина рисок пропорциональна
             const rad = (i - 90) * Math.PI / 180;
             
             const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
@@ -463,17 +452,15 @@
         let currentSunAzimuth = 0;
         let targetAzimuth = null;
 
-        // ==================== SUNCalc (полная версия, конвертация South->North) ====================
+        // ==================== SUNCalc ====================
         function getSolarPosition(date, lat, lon) {
             if (!lat || !lon || isNaN(lat) || isNaN(lon) || !window.SunCalc) 
                 return { azimuth: 0, altitude: -90 };
             try {
                 const pos = window.SunCalc.getPosition(date, lat, lon);
-                // SunCalc возвращает azimuth в радианах от юга (0 = S).
-                // Переводим в градусы, затем смещаем на 180°, чтобы получить азимут от севера.
                 let azimuth = pos.azimuth * (180 / Math.PI);
                 azimuth = (azimuth + 180) % 360;
-                azimuth = (azimuth + 360) % 360; // нормализация
+                azimuth = (azimuth + 360) % 360;
                 
                 const altitude = pos.altitude * (180 / Math.PI);
                 return { azimuth, altitude };
@@ -502,7 +489,6 @@
             const pos = getSolarPosition(now, userLat, userLon);
             currentSunAzimuth = pos.azimuth;
 
-            // Всегда показываем точку, меняем только прозрачность
             currentSunDot.style.display = 'block';
             if (pos.altitude <= -6) {
                 currentSunDot.setAttribute('opacity', '0.15');
@@ -636,20 +622,29 @@
             else executeCalculation();
         }
 
-        // ==================== Живые часы ====================
+        // ==================== Живые часы с плавной анимацией ====================
         function updateClock() {
             if (!isLocked) {
                 const now = new Date();
                 const timeStr = now.toLocaleTimeString('ru-RU', {
                     hour: '2-digit', minute: '2-digit'
                 }).replace(':', ' ');
-                timeValue.textContent = timeStr;
+                
+                if (timeValue.textContent !== timeStr) {
+                    timeValue.style.opacity = '0';
+                    timeValue.style.transform = 'translateY(10px)';
+                    setTimeout(() => {
+                        timeValue.textContent = timeStr;
+                        timeValue.style.opacity = '1';
+                        timeValue.style.transform = 'translateY(0)';
+                    }, 200);
+                }
             }
         }
         setInterval(updateClock, 1000);
         updateClock();
 
-        // ==================== Запуск с защитой от зависания промиса ====================
+        // ==================== Запуск с защитой от зависания ====================
         startBtn.addEventListener('click', async () => {
             startBtn.textContent = 'Подключение...';
             startBtn.style.pointerEvents = 'none';
