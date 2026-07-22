@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
     <title>Солнечный компас</title>
+    <!-- Интеграция SunCalc -->
+    <script src="https://cdn.jsdelivr.net/npm/suncalc@2.0.1/suncalc.min.js"></script>
     <style>
         :root {
             --bg: #050505;
@@ -15,11 +17,7 @@
             --surface-border: rgba(255, 255, 255, 0.15);
         }
 
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
 
         body {
             background-color: var(--bg);
@@ -51,7 +49,6 @@
             z-index: 0;
         }
 
-        /* --- СТАРТОВЫЙ ЭКРАН (PWA) --- */
         .start-overlay {
             position: fixed;
             inset: 0;
@@ -88,7 +85,6 @@
             background: rgba(255, 255, 255, 0.18);
         }
 
-        /* --- ВЕРХНИЙ БЛОК --- */
         .display-header {
             position: relative;
             z-index: 1;
@@ -127,7 +123,6 @@
             color: var(--text-secondary);
         }
 
-        /* --- КОМПАС (2D Вид сверху) --- */
         .compass-viewport {
             position: relative;
             z-index: 1;
@@ -173,7 +168,6 @@
             box-shadow: 0 0 8px rgba(255,255,255,0.8);
         }
 
-        /* --- НИЖНИЙ БЛОК --- */
         .footer-meta {
             position: relative;
             z-index: 1;
@@ -248,18 +242,15 @@
 </head>
 <body>
 
-    <!-- Стартовый экран для авторизации датчиков -->
     <div class="start-overlay" id="startOverlay">
         <button class="start-btn" id="startBtn">Включить компас</button>
     </div>
 
-    <!-- Заголовок -->
     <div class="display-header">
         <div class="date-label" id="dateLabel"></div>
         <div class="time-value" id="timeValue"></div>
     </div>
 
-    <!-- Компас -->
     <div class="compass-viewport" id="compassViewport">
         <div class="viewport-notch"></div>
         <div class="center-dot"></div>
@@ -280,7 +271,6 @@
         </svg>
     </div>
 
-    <!-- Кнопка спуска -->
     <div class="footer-meta">
         <button class="shutter-btn" id="calcBtn" aria-label="Сделать замер">
             <div class="shutter-inner"></div>
@@ -288,17 +278,17 @@
         <div class="location-name" id="locationLabel">Определение...</div>
     </div>
 
-    <div class="build-number">Build 1.0.7</div>
+    <div class="build-number">Build 1.0.8</div>
 
     <script>
-        // 1. Рендер рисок компаса
+        // ==================== РЕНДЕР КОМПАСА ====================
         const ticksGroup = document.getElementById('ticksGroup');
         for (let i = 0; i < 360; i += 5) {
             const isMajor = i % 30 === 0;
             const r1 = 140;
             const r2 = r1 - (isMajor ? 10 : 5);
             const rad = (i - 90) * Math.PI / 180;
-            
+                        
             const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
             line.setAttribute('x1', 150 + r1 * Math.cos(rad));
             line.setAttribute('y1', 150 + r1 * Math.sin(rad));
@@ -329,91 +319,18 @@
         let currentSunAzimuth = 0;
         let targetAzimuth = null;
 
-        startBtn.addEventListener('click', async () => {
-            startBtn.textContent = 'Подключение...';
-            startBtn.style.pointerEvents = 'none';
-
-            if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-                try {
-                    const state = await DeviceOrientationEvent.requestPermission();
-                    if (state === 'granted') {
-                        window.addEventListener('deviceorientation', handleOrientation, true);
-                    } else {
-                        alert('Доступ к компасу запрещен');
-                        return;
-                    }
-                } catch (e) {
-                    console.error(e);
-                }
-            } else {
-                window.addEventListener('deviceorientation', handleOrientation, true);
-            }
-
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(
-                    pos => {
-                        userLat = pos.coords.latitude;
-                        userLon = pos.coords.longitude;
-                        reverseGeocode(userLat, userLon);
-                        updateCurrentSunPosition();
-                        startOverlay.classList.add('hidden');
-                    },
-                    err => {
-                        userLat = 55.7558;
-                        userLon = 37.6173;
-                        locationLabel.textContent = 'Москва (Демо)';
-                        updateCurrentSunPosition();
-                        startOverlay.classList.add('hidden');
-                    },
-                    { enableHighAccuracy: true, timeout: 6000 }
-                );
-            }
-        });
-
-        const toRad = d => d * Math.PI / 180;
-        const toDeg = r => r * 180 / Math.PI;
-        
-        function getJulianDate(date) { return (date.getTime() / 1000 / 86400.0) + 2440587.5; }
-        
-        function angDiff(a, b) {
-            let d = Math.abs(a - b);
-            return Math.min(d, 360 - d);
+        // ==================== SUNCalc ====================
+        function getSolarPosition(date, lat, lon) {
+            if (!lat || !lon) return { azimuth: 0, altitude: -90 };
+            const pos = SunCalc.getPosition(date, lat, lon);
+                        
+            let azimuth = pos.azimuth * (180 / Math.PI);
+            azimuth = (azimuth + 180) % 360;   
+            const altitude = pos.altitude * (180 / Math.PI);
+            return { azimuth, altitude };
         }
 
-        // Перевод астрономического азимута (от юга) в навигационный (от севера)
-        function toNorthAzimuth(southAzimuth) {
-            return (southAzimuth + 180) % 360;
-        }
-
-        function getSolarPosition(jd, lat, lon) {
-            const d = jd - 2451545.0;
-            const g = (357.529 + 0.98560028 * d) % 360;
-            const q = (280.459 + 0.98564736 * d) % 360;
-            const L = (q + 1.915 * Math.sin(toRad(g)) + 0.020 * Math.sin(toRad(2 * g))) % 360;
-            const e = 23.439 - 0.00000036 * d;
-
-            const alpha = toDeg(Math.atan2(Math.cos(toRad(e)) * Math.sin(toRad(L)), Math.cos(toRad(L))));
-            const delta = toDeg(Math.asin(Math.sin(toRad(e)) * Math.sin(toRad(L))));
-
-            const gmst = (280.46061837 + 360.98564736629 * d) % 360;
-            let hourAngle = (gmst + lon - alpha) % 360;
-            hourAngle = (hourAngle + 360) % 360;
-
-            const sinAlt = Math.sin(toRad(lat)) * Math.sin(toRad(delta)) +
-                Math.cos(toRad(lat)) * Math.cos(toRad(delta)) * Math.cos(toRad(hourAngle));
-            const altitude = toDeg(Math.asin(Math.max(-1, Math.min(1, sinAlt))));
-
-            let southAzimuth = toDeg(Math.atan2(
-                -Math.sin(toRad(hourAngle)),
-                Math.cos(toRad(lat)) * Math.tan(toRad(delta)) - Math.sin(toRad(lat)) * Math.cos(toRad(hourAngle))
-            ));
-            southAzimuth = (southAzimuth + 360) % 360;
-
-            return { 
-                azimuth: toNorthAzimuth(southAzimuth), // Приводим к навигационной шкале от Севера
-                altitude 
-            };
-        }
+        const angDiff = (a, b) => Math.min(Math.abs(a - b), 360 - Math.abs(a - b));
 
         function setSvgDotPosition(dotElement, azimuth, radius) {
             const rad = (azimuth - 90) * Math.PI / 180;
@@ -426,11 +343,9 @@
         function updateCurrentSunPosition() {
             if (userLat === null || userLon === null) return;
             const now = new Date();
-            const jd = getJulianDate(now);
-            const pos = getSolarPosition(jd, userLat, userLon);
-            currentSunAzimuth = pos.azimuth; // Уже в навигационной шкале
-
-            if (pos.altitude <= 0) {
+            const pos = getSolarPosition(now, userLat, userLon);
+            currentSunAzimuth = pos.azimuth;
+            if (pos.altitude <= 0.5) {
                 currentSunDot.style.display = 'none';
             } else {
                 currentSunDot.style.display = 'block';
@@ -438,68 +353,49 @@
             }
         }
 
-        function findSolarPassage(tAzimuth, lat, lon) {
+        function findSolarPassage(targetAzimuth, lat, lon) {
             const now = new Date();
-            const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-            const startJd = getJulianDate(todayStart);
-
-            for (let day = 0; day < 365; day++) {
-                const dayJd = startJd + day;
-                let lastFoundHour = -1;
-
-                for (let h = 0; h < 24; h += 0.5) {
-                    if (h <= lastFoundHour) continue;
-
-                    const jd = dayJd + (h / 24);
-                    const pos = getSolarPosition(jd, lat, lon);
-                    
-                    if (pos.altitude > 0) {
-                        if (angDiff(pos.azimuth, tAzimuth) < 6) {
-                            let bestJd = jd;
-                            let minDiff = Infinity;
-                            
-                            for (let m = -45; m <= 45; m++) {
-                                let minuteJd = jd + (m / 1440);
-                                let mPos = getSolarPosition(minuteJd, lat, lon);
-                                let diff = angDiff(mPos.azimuth, tAzimuth);
-                                
-                                if (diff < minDiff) {
-                                    minDiff = diff;
-                                    bestJd = minuteJd;
-                                }
+            let checkDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            for (let day = 0; day < 10; day++) {
+                for (let min = 0; min < 1440; min += 5) {
+                    const testDate = new Date(checkDate.getTime() + min * 60000);
+                    if (testDate < now) continue;
+                    const pos = getSolarPosition(testDate, lat, lon);
+                    if (pos.altitude > 0 && angDiff(pos.azimuth, targetAzimuth) < 4) {
+                        let bestDate = testDate;
+                        let minDiff = Infinity;
+                        for (let f = -12; f <= 12; f++) {
+                            const fineDate = new Date(testDate.getTime() + f * 60000);
+                            const fPos = getSolarPosition(fineDate, lat, lon);
+                            const diff = angDiff(fPos.azimuth, targetAzimuth);
+                            if (diff < minDiff) {
+                                minDiff = diff;
+                                bestDate = fineDate;
                             }
-                            const passageDate = new Date((bestJd - 2440587.5) * 86400 * 1000);
-                            
-                            if (passageDate > now) {
-                                return passageDate;
-                            }
-
-                            // Пропускаем текущий перебор на 4 часа вперед, чтобы не зацикливаться на том же проходе
-                            lastFoundHour = h + 4;
                         }
+                        return bestDate;
                     }
                 }
+                checkDate.setDate(checkDate.getDate() + 1);
             }
             return null;
         }
 
         function formatResult(date) {
             if (!date) return { dateStr: 'Вне орбиты', timeStr: '—' };
-
             const timeStr = date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-            const dTarget = new Date(date);
-            dTarget.setHours(0, 0, 0, 0);
-
-            const dNow = new Date();
-            dNow.setHours(0, 0, 0, 0);
-
+            const dTarget = new Date(date); dTarget.setHours(0,0,0,0);
+            const dNow = new Date(); dNow.setHours(0,0,0,0);
             const diffDays = Math.round((dTarget - dNow) / 86400000);
-
             if (diffDays === 0) return { dateStr: 'Сегодня', timeStr };
             if (diffDays === 1) return { dateStr: 'Завтра', timeStr };
-            return { dateStr: date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' }), timeStr };
+            return { 
+                dateStr: date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' }), 
+                timeStr 
+            };
         }
 
+        // ==================== Компас и сенсоры ====================
         function handleOrientation(e) {
             let heading = e.webkitCompassHeading || (e.alpha !== null ? 360 - e.alpha : null);
             if (heading !== null) {
@@ -509,14 +405,12 @@
 
         function onHeadingChange(heading) {
             if (isLocked) return;
-
             let diff = heading - lastRawHeading;
             if (diff < -180) diff += 360;
             if (diff > 180) diff -= 360;
             unwrappedHeading += diff;
             lastRawHeading = heading;
             currentHeading = heading;
-
             compassSvg.style.transform = `rotate(${-unwrappedHeading}deg)`;
         }
 
@@ -535,25 +429,20 @@
             if (userLat === null) return;
             isLocked = true;
             targetAzimuth = currentHeading;
-
             dateLabel.textContent = '';
             timeValue.textContent = '···';
             timeValue.classList.add('dots');
-
             setTimeout(() => {
                 const passageDate = findSolarPassage(targetAzimuth, userLat, userLon);
                 const { dateStr, timeStr } = formatResult(passageDate);
-
                 dateLabel.textContent = dateStr;
                 timeValue.classList.remove('dots');
                 timeValue.textContent = timeStr;
-
                 setSvgDotPosition(targetSunDot, targetAzimuth, 140);
-                targetSunDot.style.display = 'true' ? 'block' : 'none'; // исправлено отображение
-
+                targetSunDot.style.display = 'block';
                 compassViewport.classList.add('locked');
                 calcBtn.classList.add('active');
-            }, 100);
+            }, 80);
         }
 
         function toggleLock() {
@@ -561,18 +450,48 @@
             else executeCalculation();
         }
 
-        calcBtn.addEventListener('click', toggleLock);
-        compassViewport.addEventListener('click', toggleLock);
+        // ==================== Запуск ====================
+        startBtn.addEventListener('click', async () => {
+            startBtn.textContent = 'Подключение...';
+            startBtn.style.pointerEvents = 'none';
+            if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+                try {
+                    const state = await DeviceOrientationEvent.requestPermission();
+                    if (state === 'granted') window.addEventListener('deviceorientation', handleOrientation, true);
+                    else alert('Доступ к компасу запрещен');
+                } catch (e) { console.error(e); }
+            } else {
+                window.addEventListener('deviceorientation', handleOrientation, true);
+            }
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(pos => {
+                    userLat = pos.coords.latitude;
+                    userLon = pos.coords.longitude;
+                    reverseGeocode(userLat, userLon);
+                    updateCurrentSunPosition();
+                    startOverlay.classList.add('hidden');
+                }, () => {
+                    userLat = 55.7558; userLon = 37.6173;
+                    locationLabel.textContent = 'Москва (Демо)';
+                    updateCurrentSunPosition();
+                    startOverlay.classList.add('hidden');
+                }, { enableHighAccuracy: true, timeout: 8000 });
+            }
+        });
 
         function reverseGeocode(lat, lon) {
             locationLabel.textContent = `${lat.toFixed(2)}°, ${lon.toFixed(2)}°`;
             fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&accept-language=ru`)
                 .then(r => r.json())
                 .then(data => {
-                    const city = data.address.city || data.address.town || data.address.settlement;
+                    const city = data.address.city || data.address.town || data.address.settlement || data.address.country;
                     if (city) locationLabel.textContent = city;
                 }).catch(() => {});
         }
+
+        calcBtn.addEventListener('click', toggleLock);
+        compassViewport.addEventListener('click', toggleLock);
+        setInterval(updateCurrentSunPosition, 20000);
     </script>
 </body>
 </html>
