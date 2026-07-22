@@ -10,10 +10,11 @@
     <meta name="theme-color" content="#050505">
     <link rel="apple-touch-icon" href="icon-192.png">
 
-    <!-- Встроенный SunCalc для полной офлайн-автономности -->
+    <!-- Встроенный SunCalc с экспортом в window -->
     <script>
         !function(){var a={};function b(c){if(a[c])return a[c].exports;var d=a[c]={i:c,l:!1,exports:{}};return c[c].call(d.exports,d,d.exports,b),d.l=!0,d.exports}b.m=c=[function(a,b,c){"use strict";Object.defineProperty(b,"__esModule",{value:!0});var d=c(1),e=c(2),f=14712,g=Math.PI,h=g/180,i=180/g,j=2451545;function k(a){return a.valueOf()/86400000+2440587.5-2451545}function l(a){return k(a)}function m(a){return l(a)*h}function n(a){return.017202*e.sin(m(a))}function o(a){var b=k(a);return.0009+b*3.25e-8}function p(a){return(a%360+360)%360}function q(a){var b=k(a);return p(280.46+0.9856474*b)}function r(a){var b=k(a);return p(357.528+0.9856003*b)}function s(a){var b=r(a),c=h*b;return h*(1.915*e.sin(c)+0.02*e.sin(2*c))}function t(a){var b=q(a),c=s(a),d=p(b+c+180);return d}function u(a){var b=t(a),c=h*23.4392911;return Math.asin(Math.sin(c)*Math.sin(h*b))}function v(a){var b=t(a),c=h*23.4392911;return Math.atan2(Math.cos(c)*Math.sin(h*b),Math.cos(h*b))}function w(a,b){var c=m(a);return b-n(a)-o(a)-c}function x(a,b,c){var d=l(a),e=d-c/360;return j+e}function y(a,b,c){var d=x(a,b,c),e=2451545+d,f=v(e),g=u(e),h=m(e),i=w(e,b);return Math.asin(Math.sin(c)*Math.sin(g)+Math.cos(c)*Math.cos(g)*Math.cos(h-f))}function z(a,b,c){return 0}b.getPosition=function(a,b,c){var d=l(a),e=h*b,f=-h*c,g=v(d),hy=u(d),i=w(d,f),j=Math.sin(e),k=Math.cos(e),l=Math.sin(hy),m=Math.cos(hy),n=Math.sin(i),o=Math.cos(i),p=j*l+k*m*o,q=Math.asin(Math.max(-1,Math.min(1,p))),r=Math.atan2(-n,k*l-j*m*o);return{azimuth:r,altitude:q}},b.getTime=function(a,b,c,d){var e=l(a);return new Date((e-2440587.5)*86400000)}},{1:function(a,b){},2:function(a,b){b.sin=Math.sin,b.cos=Math.cos,b.atan2=Math.atan2,b.asin=Math.asin}}];
         var SunCalc = b(0);
+        window.SunCalc = SunCalc; // Экспорт в глобальную область видимости
     </script>
 
     <style>
@@ -276,7 +277,6 @@
             <text x="150" y="280" fill="rgba(255,255,255,0.4)" font-size="12" font-weight="500" text-anchor="middle">S</text>
             <text x="28" y="154" fill="rgba(255,255,255,0.4)" font-size="12" font-weight="500" text-anchor="middle">W</text>
 
-            <!-- Фиксированный hex-код в drop-shadow для универсальной совместимости -->
             <circle id="currentSunDot" cx="150" cy="50" r="5" fill="#ffffff" filter="drop-shadow(0 0 6px rgba(255,255,255,0.9))" style="display: none;" />
             <circle id="targetSunDot" cx="150" cy="10" r="7" fill="#ffd25f" filter="drop-shadow(0 0 10px #ffd25f)" style="display: none;" />
         </svg>
@@ -331,15 +331,16 @@
         let isLocked = false;
         let isCalculating = false;
         let needSyncAfterUnlock = false;
+        let compassReady = false; // Флаг готовности компаса
         let currentSunAzimuth = 0;
         let targetAzimuth = null;
 
-        // ==================== SUNCalc (Автономный) ====================
+        // ==================== SUNCalc (Автономный с глобальным экспортом) ====================
         function getSolarPosition(date, lat, lon) {
             if (!lat || !lon || isNaN(lat) || isNaN(lon)) 
                 return { azimuth: 0, altitude: -90 };
             try {
-                const pos = SunCalc.getPosition(date, lat, lon);
+                const pos = window.SunCalc.getPosition(date, lat, lon);
                 let azimuth = (pos.azimuth * 180 / Math.PI + 180) % 360;
                 const altitude = pos.altitude * 180 / Math.PI;
                 return { azimuth, altitude };
@@ -424,6 +425,7 @@
             let heading = e.webkitCompassHeading || (e.alpha !== null ? 360 - e.alpha : null);
             if (heading !== null) {
                 requestAnimationFrame(() => {
+                    if (!compassReady) compassReady = true; // Сигнал от компаса получен
                     if (needSyncAfterUnlock) {
                         unwrappedHeading = heading;
                         lastRawHeading = heading;
@@ -458,10 +460,11 @@
             dateLabel.textContent = '';
             updateClock();
             timeValue.classList.remove('dots');
+            updateCurrentSunPosition(); // Сразу пересчитываем положение текущего солнца при сбросе
         }
 
         function executeCalculation() {
-            if (userLat === null || isCalculating || isLocked) return;
+            if (userLat === null || isCalculating || isLocked || !compassReady) return;
             isCalculating = true;
             isLocked = true;
             targetAzimuth = currentHeading;
@@ -587,7 +590,6 @@
         calcBtn.addEventListener('click', toggleLock);
         compassViewport.addEventListener('click', toggleLock);
 
-        // Переведено на поминутный интервал (60000мс) для оптимальной производительности
         setInterval(updateCurrentSunPosition, 60000);
     </script>
 </body>
