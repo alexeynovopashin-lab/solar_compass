@@ -285,7 +285,7 @@
         <div class="location-name" id="locationLabel">Определение...</div>
     </div>
 
-    <div class="build-number">Build 1.1.6</div>
+    <div class="build-number">Build 1.1.7</div>
 
     <script>
         console.log('Script loaded successfully');
@@ -328,7 +328,6 @@
         let isLocked = false;
         let isCalculating = false;
         let needSyncAfterUnlock = false;
-        let compassReady = false;
         let currentSunAzimuth = 0;
         let targetAzimuth = null;
 
@@ -338,9 +337,9 @@
                 return { azimuth: 0, altitude: -90 };
             try {
                 const pos = window.SunCalc.getPosition(date, lat, lon);
+                // Преобразование радиан -> градусы, перенос начала отсчёта с юга на север
                 let azimuth = (pos.azimuth * (180 / Math.PI) + 180) % 360;
                 azimuth = (azimuth + 360) % 360;
-                
                 const altitude = pos.altitude * (180 / Math.PI);
                 return { azimuth, altitude };
             } catch (e) {
@@ -368,7 +367,8 @@
             const pos = getSolarPosition(now, userLat, userLon);
             currentSunAzimuth = pos.azimuth;
 
-            if (pos.altitude <= 0.5) {
+            // Прячем точку только после захода за гражданские сумерки (-6°)
+            if (pos.altitude <= -6) {
                 currentSunDot.style.display = 'none';
             } else {
                 currentSunDot.style.display = 'block';
@@ -379,16 +379,16 @@
         function findSolarPassage(targetAzimuth, lat, lon) {
             const now = new Date();
             let checkDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-            for (let day = 0; day < 30; day++) {
-                for (let min = 0; min < 1440; min += 5) {
+            for (let day = 0; day < 40; day++) {
+                for (let min = 0; min < 1440; min += 4) {
                     const testDate = new Date(checkDate.getTime() + min * 60000);
                     if (testDate < now) continue;
+
                     const pos = getSolarPosition(testDate, lat, lon);
-                    // Ищем прохождение азимута даже под горизонтом
-                    if (angDiff(pos.azimuth, targetAzimuth) < 4) {
+                    if (angDiff(pos.azimuth, targetAzimuth) < 3.5) {
                         let bestDate = testDate;
                         let minDiff = Infinity;
-                        for (let f = -12; f <= 12; f++) {
+                        for (let f = -15; f <= 15; f++) {
                             const fineDate = new Date(testDate.getTime() + f * 60000);
                             const fPos = getSolarPosition(fineDate, lat, lon);
                             const diff = angDiff(fPos.azimuth, targetAzimuth);
@@ -405,8 +405,9 @@
             return null;
         }
 
-        function formatResult(date, lat, lon) {
-            if (!date) return { dateStr: 'Вне орбиты', timeStr: '—' };
+        function formatResult(date) {
+            if (!date) return { dateStr: 'Не найдено в ближайшие 40 дней', timeStr: '—' };
+
             const timeStr = date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
             const dTarget = new Date(date); dTarget.setHours(0,0,0,0);
             const dNow = new Date(); dNow.setHours(0,0,0,0);
@@ -417,11 +418,6 @@
             else if (diffDays === 1) dateStr = 'Завтра';
             else dateStr = date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
 
-            const sunPos = getSolarPosition(date, lat, lon);
-            if (sunPos.altitude <= 0) {
-                dateStr += ' 🌑';
-            }
-
             return { dateStr, timeStr };
         }
 
@@ -430,7 +426,6 @@
             let heading = e.webkitCompassHeading || (e.alpha !== null ? 360 - e.alpha : null);
             if (heading !== null) {
                 requestAnimationFrame(() => {
-                    if (!compassReady) compassReady = true;
                     if (needSyncAfterUnlock) {
                         unwrappedHeading = heading;
                         lastRawHeading = heading;
@@ -469,7 +464,7 @@
         }
 
         function executeCalculation() {
-            if (userLat === null || isCalculating || isLocked || !compassReady) return;
+            if (userLat === null || isCalculating || isLocked) return;
             isCalculating = true;
             isLocked = true;
             targetAzimuth = currentHeading;
@@ -480,7 +475,7 @@
 
             setTimeout(() => {
                 const passageDate = findSolarPassage(targetAzimuth, userLat, userLon);
-                const { dateStr, timeStr } = formatResult(passageDate, userLat, userLon);
+                const { dateStr, timeStr } = formatResult(passageDate);
 
                 dateLabel.textContent = dateStr;
                 timeValue.classList.remove('dots');
@@ -492,7 +487,7 @@
                 compassViewport.classList.add('locked');
                 calcBtn.classList.add('active');
                 isCalculating = false;
-            }, 80);
+            }, 100);
         }
 
         function toggleLock() {
@@ -514,33 +509,50 @@
         setInterval(updateClock, 1000);
         updateClock();
 
-        // ==================== Запуск и Кэширование геокодирования ====================
+        // ==================== Запуск с защитой от зависания промиса ====================
         startBtn.addEventListener('click', async () => {
             startBtn.textContent = 'Подключение...';
             startBtn.style.pointerEvents = 'none';
 
             let permissionGranted = true;
 
-            if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-                try {
-                    const state = await DeviceOrientationEvent.requestPermission();
-                    if (state !== 'granted') {
-                        alert('Доступ к компасу запрещён. Приложение не сможет работать.');
-                        permissionGranted = false;
-                        startBtn.textContent = 'Включить компас';
-                        startBtn.style.pointerEvents = 'auto';
-                    } else {
+            async function requestOrientationWithTimeout() {
+                if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+                    let timeoutId;
+                    try {
+                        const permissionPromise = DeviceOrientationEvent.requestPermission();
+                        const timeoutPromise = new Promise((_, reject) => 
+                            timeoutId = setTimeout(() => reject(new Error('Permission timeout')), 3000)
+                        );
+                        
+                        const state = await Promise.race([permissionPromise, timeoutPromise]);
+                        clearTimeout(timeoutId);
+
+                        if (state !== 'granted') {
+                            alert('Доступ к компасу запрещён. Приложение не сможет работать.');
+                            permissionGranted = false;
+                        } else {
+                            window.addEventListener('deviceorientation', handleOrientation, true);
+                        }
+                    } catch (e) {
+                        clearTimeout(timeoutId);
+                        console.warn('Orientation permission timeout or error, applying fallback:', e);
                         window.addEventListener('deviceorientation', handleOrientation, true);
                     }
-                } catch (e) {
-                    console.error('Orientation permission error:', e);
+                } else {
                     window.addEventListener('deviceorientation', handleOrientation, true);
                 }
-            } else {
-                window.addEventListener('deviceorientation', handleOrientation, true);
             }
 
-            if (navigator.geolocation && permissionGranted) {
+            await requestOrientationWithTimeout();
+
+            if (!permissionGranted) {
+                startBtn.textContent = 'Включить компас';
+                startBtn.style.pointerEvents = 'auto';
+                return;
+            }
+
+            if (navigator.geolocation) {
                 navigator.geolocation.getCurrentPosition(
                     pos => {
                         userLat = pos.coords.latitude;
@@ -557,12 +569,11 @@
                         updateCurrentSunPosition();
                         startOverlay.classList.add('hidden');
                     },
-                    { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+                    { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 }
                 );
-            } else if (!permissionGranted) {
-                // Кнопка сброшена выше
             } else {
-                userLat = 55.7558; userLon = 37.6173;
+                userLat = 55.7558; 
+                userLon = 37.6173;
                 locationLabel.textContent = 'Москва (Демо)';
                 updateCurrentSunPosition();
                 startOverlay.classList.add('hidden');
@@ -595,7 +606,7 @@
         calcBtn.addEventListener('click', toggleLock);
         compassViewport.addEventListener('click', toggleLock);
 
-        setInterval(updateCurrentSunPosition, 60000);
+        setInterval(updateCurrentSunPosition, 30000);
     </script>
 </body>
 </html>
