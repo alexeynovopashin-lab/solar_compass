@@ -4,6 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
     <title>Солнечный компас</title>
+    
+    <!-- PWA -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#050505">
+    <link rel="apple-touch-icon" href="icon-192.png">
+
     <!-- Интеграция SunCalc -->
     <script src="https://cdn.jsdelivr.net/npm/suncalc@2.0.1/suncalc.min.js"></script>
     <style>
@@ -278,7 +284,7 @@
         <div class="location-name" id="locationLabel">Определение...</div>
     </div>
 
-    <div class="build-number">Build 1.0.8</div>
+    <div class="build-number">Build 1.0.9</div>
 
     <script>
         // ==================== РЕНДЕР КОМПАСА ====================
@@ -330,7 +336,10 @@
             return { azimuth, altitude };
         }
 
-        const angDiff = (a, b) => Math.min(Math.abs(a - b), 360 - Math.abs(a - b));
+        const angDiff = (a, b) => {
+            let d = Math.abs(a - b) % 360;
+            return Math.min(d, 360 - d);
+        };
 
         function setSvgDotPosition(dotElement, azimuth, radius) {
             const rad = (azimuth - 90) * Math.PI / 180;
@@ -421,7 +430,9 @@
             targetSunDot.style.display = 'none';
             calcBtn.classList.remove('active');
             dateLabel.textContent = '';
-            timeValue.textContent = '';
+            
+            // Сразу отображаем текущие часы при сбросе
+            updateClock();
             timeValue.classList.remove('dots');
         }
 
@@ -449,6 +460,20 @@
             if (isLocked) resetLock();
             else executeCalculation();
         }
+
+        // ==================== Живые часы ====================
+        function updateClock() {
+            if (!isLocked) {
+                const now = new Date();
+                const timeStr = now.toLocaleTimeString('ru-RU', { 
+                    hour: '2-digit', 
+                    minute: '2-digit' 
+                }).replace(':', ' ');
+                timeValue.textContent = timeStr;
+            }
+        }
+        setInterval(updateClock, 1000);
+        updateClock(); // Первоначальный вызов
 
         // ==================== Запуск ====================
         startBtn.addEventListener('click', async () => {
