@@ -288,7 +288,7 @@
         <div class="location-name" id="locationLabel">Определение...</div>
     </div>
 
-    <div class="build-number">Build 1.0.6</div>
+    <div class="build-number">Build 1.0.7</div>
 
     <script>
         // 1. Рендер рисок компаса
@@ -380,6 +380,11 @@
             return Math.min(d, 360 - d);
         }
 
+        // Перевод астрономического азимута (от юга) в навигационный (от севера)
+        function toNorthAzimuth(southAzimuth) {
+            return (southAzimuth + 180) % 360;
+        }
+
         function getSolarPosition(jd, lat, lon) {
             const d = jd - 2451545.0;
             const g = (357.529 + 0.98560028 * d) % 360;
@@ -398,11 +403,16 @@
                 Math.cos(toRad(lat)) * Math.cos(toRad(delta)) * Math.cos(toRad(hourAngle));
             const altitude = toDeg(Math.asin(Math.max(-1, Math.min(1, sinAlt))));
 
-            let azimuth = toDeg(Math.atan2(
+            let southAzimuth = toDeg(Math.atan2(
                 -Math.sin(toRad(hourAngle)),
                 Math.cos(toRad(lat)) * Math.tan(toRad(delta)) - Math.sin(toRad(lat)) * Math.cos(toRad(hourAngle))
             ));
-            return { azimuth: (azimuth + 360) % 360, altitude };
+            southAzimuth = (southAzimuth + 360) % 360;
+
+            return { 
+                azimuth: toNorthAzimuth(southAzimuth), // Приводим к навигационной шкале от Севера
+                altitude 
+            };
         }
 
         function setSvgDotPosition(dotElement, azimuth, radius) {
@@ -418,7 +428,7 @@
             const now = new Date();
             const jd = getJulianDate(now);
             const pos = getSolarPosition(jd, userLat, userLon);
-            currentSunAzimuth = pos.azimuth;
+            currentSunAzimuth = pos.azimuth; // Уже в навигационной шкале
 
             if (pos.altitude <= 0) {
                 currentSunDot.style.display = 'none';
@@ -428,7 +438,6 @@
             }
         }
 
-        // Умный поиск будущего времени (с учетом уже прошедших часов сегодня)
         function findSolarPassage(tAzimuth, lat, lon) {
             const now = new Date();
             const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -436,7 +445,11 @@
 
             for (let day = 0; day < 365; day++) {
                 const dayJd = startJd + day;
+                let lastFoundHour = -1;
+
                 for (let h = 0; h < 24; h += 0.5) {
+                    if (h <= lastFoundHour) continue;
+
                     const jd = dayJd + (h / 24);
                     const pos = getSolarPosition(jd, lat, lon);
                     
@@ -457,10 +470,12 @@
                             }
                             const passageDate = new Date((bestJd - 2440587.5) * 86400 * 1000);
                             
-                            // БЕРЕМ ТОЛЬКО БУДУЩЕЕ ВРЕМЯ (прошедшие часы сегодня игнорируются)
                             if (passageDate > now) {
                                 return passageDate;
                             }
+
+                            // Пропускаем текущий перебор на 4 часа вперед, чтобы не зацикливаться на том же проходе
+                            lastFoundHour = h + 4;
                         }
                     }
                 }
@@ -534,7 +549,7 @@
                 timeValue.textContent = timeStr;
 
                 setSvgDotPosition(targetSunDot, targetAzimuth, 140);
-                targetSunDot.style.display = 'block';
+                targetSunDot.style.display = 'true' ? 'block' : 'none'; // исправлено отображение
 
                 compassViewport.classList.add('locked');
                 calcBtn.classList.add('active');
