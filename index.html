@@ -10,7 +10,7 @@
     <meta name="theme-color" content="#050505">
     <link rel="apple-touch-icon" href="icon-192.png">
 
-    <!-- Исправленный автономный SunCalc с надежным глобальным экспортом -->
+    <!-- Автономный SunCalc -->
     <script>/* SunCalc 2.0.1 (c) Vladimir Agafonkin, MIT License */!function(){var t={};function e(n){if(t[n])return t[n].exports;var r=t[n]={i:n,l:!1,exports:{}};return e.m[n].call(r.exports,r,r.exports,e),r.l=!0,r.exports}e.m=[function(t,e,n){"use strict";var r=n(1),i=n(2),a=14712,o=Math.PI,u=o/180,s=180/o,c=2451545;function l(t){return t.valueOf()/864e5+2440587.5-c}function f(t){return l(t)}function d(t){return f(t)*u}function m(t){return.017202*i.sin(d(t))}function g(t){var e=l(t);return 9e-4+3.25e-8*e}function h(t){return(t%360+360)%360}function p(t){var e=l(t);return h(280.46+.9856474*e)}function v(t){var e=l(t);return h(357.528+.9856003*e)}function y(t){var e=v(t),n=u*e;return u*(1.915*i.sin(n)+.02*i.sin(2*n))}function b(t){var e=p(t)+y(t);return h(e+180)}function x(t){var e=b(t),n=u*23.4392911;return Math.asin(Math.sin(n)*Math.sin(u*e))}function w(t){var e=b(t),n=u*23.4392911;return Math.atan2(Math.cos(n)*Math.sin(u*e),Math.cos(u*e))}function S(t,e){var n=d(t);return e-m(t)-g(t)-n}function E(t,e,n){var r=f(t);return c+r-n/360}function _(t,e,n){var r=E(t,e,n),i=c+r,a=w(i),o=x(i),u=d(i),s=S(i,e);return Math.asin(Math.sin(n)*Math.sin(o)+Math.cos(n)*Math.cos(o)*Math.cos(u-a))}Object.defineProperty(e,"__esModule",{value:!0}),e.getPosition=function(t,e,n){var r=f(t),a=u*e,o=-u*n,c=w(r),l=x(r),d=S(r,o),m=Math.sin(a),g=Math.cos(a),h=Math.sin(l),p=Math.cos(l),v=Math.sin(d),y=Math.cos(d),b=m*h+g*p*y,E=Math.asin(Math.max(-1,Math.min(1,b))),T=Math.atan2(-v,g*h-m*p*y);return{azimuth:T,altitude:E}},e.getTime=function(t,e,n,r){var i=f(t);return new Date((i-2440587.5)*864e5)}},function(t,e){},function(t,e){e.sin=Math.sin,e.cos=Math.cos,e.atan2=Math.atan2,e.asin=Math.asin}];window.SunCalc = e(0);}();</script>
 
     <style>
@@ -65,6 +65,541 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
+            transition: opacity 0.5s ease;
+        }
+
+        .start-overlay.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .start-btn {
+            background: var(--surface);
+            border: 1px solid var(--surface-border);
+            color: var(--text-primary);
+            padding: 18px 42px;
+            border-radius: 100px;
+            font-size: 16px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: transform 0.2s, background 0.2s;
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+        }
+
+        .start-btn:active {
+            transform: scale(0.95);
+            background: rgba(255, 255, 255, 0.18);
+        }
+
+        .display-header {
+            position: relative;
+            z-index: 1;
+            text-align: center;
+            margin-top: 10px;
+            min-height: 110px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .date-label {
+            font-size: 18px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            letter-spacing: -0.2px;
+            min-height: 24px;
+        }
+
+        .time-value {
+            font-size: 72px;
+            font-weight: 100;
+            letter-spacing: -3px;
+            line-height: 1;
+            color: var(--text-primary);
+            font-variant-numeric: tabular-nums;
+            margin-top: 4px;
+            min-height: 72px;
+        }
+
+        .time-value.dots {
+            font-size: 40px;
+            font-weight: 200;
+            letter-spacing: 6px;
+            color: var(--text-secondary);
+        }
+
+        .compass-viewport {
+            position: relative;
+            z-index: 1;
+            width: 300px;
+            height: 300px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        .compass-viewport.locked {
+            transform: scale(1.04);
+        }
+
+        .viewport-notch {
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 2px;
+            height: 10px;
+            background: var(--accent-sun);
+            z-index: 5;
+            box-shadow: 0 0 8px var(--accent-sun);
+        }
+
+        .compass-svg {
+            width: 100%;
+            height: 100%;
+            will-change: transform;
+            transition: transform 0.1s linear;
+        }
+
+        .center-dot {
+            position: absolute;
+            width: 6px;
+            height: 6px;
+            background: var(--text-primary);
+            border-radius: 50%;
+            z-index: 4;
+            box-shadow: 0 0 8px rgba(255,255,255,0.8);
+        }
+
+        .footer-meta {
+            position: relative;
+            z-index: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 16px;
+            width: 100%;
+        }
+
+        .shutter-btn {
+            width: 72px;
+            height: 72px;
+            border-radius: 50%;
+            border: 3px solid rgba(255, 255, 255, 0.85);
+            background: transparent;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            outline: none;
+            -webkit-tap-highlight-color: transparent;
+            transition: border-color 0.3s ease, transform 0.15s ease;
+        }
+
+        .shutter-btn:active {
+            transform: scale(0.93);
+        }
+
+        .shutter-inner {
+            width: 58px;
+            height: 58px;
+            border-radius: 50%;
+            background: #ffffff;
+            transition: transform 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275), 
+                        background-color 0.25s ease, 
+                        border-radius 0.25s ease,
+                        box-shadow 0.25s ease;
+        }
+
+        .shutter-btn.active {
+            border-color: var(--accent-sun);
+        }
+
+        .shutter-btn.active .shutter-inner {
+            background: var(--accent-sun);
+            box-shadow: 0 0 20px var(--accent-glow);
+            transform: scale(0.72);
+            border-radius: 14px;
+        }
+
+        .location-name {
+            font-size: 13px;
+            font-weight: 400;
+            color: var(--text-secondary);
+            letter-spacing: 0.2px;
+        }
+
+        .build-number {
+            position: absolute;
+            bottom: 12px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 10px;
+            color: rgba(255, 255, 255, 0.15);
+            font-weight: 500;
+            letter-spacing: 0.5px;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="start-overlay" id="startOverlay">
+        <button class="start-btn" id="startBtn">Включить компас</button>
+    </div>
+
+    <div class="display-header">
+        <div class="date-label" id="dateLabel"></div>
+        <div class="time-value" id="timeValue"></div>
+    </div>
+
+    <div class="compass-viewport" id="compassViewport">
+        <div class="viewport-notch"></div>
+        <div class="center-dot"></div>
+        
+        <svg class="compass-svg" id="compassSvg" viewBox="0 0 300 300">
+            <circle cx="150" cy="150" r="140" stroke="rgba(255,255,255,0.08)" stroke-width="1" fill="none"/>
+            <circle cx="150" cy="150" r="100" stroke="rgba(255,255,255,0.1)" stroke-width="1" stroke-dasharray="2 4" fill="none"/>
+            
+            <g id="ticksGroup"></g>
+
+            <text x="150" y="28" fill="#ffd25f" font-size="12" font-weight="600" text-anchor="middle">N</text>
+            <text x="272" y="154" fill="rgba(255,255,255,0.4)" font-size="12" font-weight="500" text-anchor="middle">E</text>
+            <text x="150" y="280" fill="rgba(255,255,255,0.4)" font-size="12" font-weight="500" text-anchor="middle">S</text>
+            <text x="28" y="154" fill="rgba(255,255,255,0.4)" font-size="12" font-weight="500" text-anchor="middle">W</text>
+
+            <circle id="currentSunDot" cx="150" cy="50" r="5" fill="#ffffff" filter="drop-shadow(0 0 6px rgba(255,255,255,0.9))" style="display: none;" />
+            <circle id="targetSunDot" cx="150" cy="10" r="7" fill="#ffd25f" filter="drop-shadow(0 0 10px #ffd25f)" style="display: none;" />
+        </svg>
+    </div>
+
+    <div class="footer-meta">
+        <button class="shutter-btn" id="calcBtn" aria-label="Сделать замер">
+            <div class="shutter-inner"></div>
+        </button>
+        <div class="location-name" id="locationLabel">Определение...</div>
+    </div>
+
+    <div class="build-number">Build 1.1.5</div>
+
+    <script>
+        console.log('Script loaded successfully');
+        console.log('SunCalc defined:', !!window.SunCalc);
+
+        // ==================== РЕНДЕР КОМПАСА ====================
+        const ticksGroup = document.getElementById('ticksGroup');
+        for (let i = 0; i < 360; i += 5) {
+            const isMajor = i % 30 === 0;
+            const r1 = 140;
+            const r2 = r1 - (isMajor ? 10 : 5);
+            const rad = (i - 90) * Math.PI / 180;
+            
+            const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            line.setAttribute('x1', 150 + r1 * Math.cos(rad));
+            line.setAttribute('y1', 150 + r1 * Math.sin(rad));
+            line.setAttribute('x2', 150 + r2 * Math.cos(rad));
+            line.setAttribute('y2', 150 + r2 * Math.sin(rad));
+            line.setAttribute('stroke', isMajor ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.1)');
+            line.setAttribute('stroke-width', isMajor ? '1.5' : '1');
+            ticksGroup.appendChild(line);
+        }
+
+        const dateLabel = document.getElementById('dateLabel');
+        const timeValue = document.getElementById('timeValue');
+        const locationLabel = document.getElementById('locationLabel');
+        const compassSvg = document.getElementById('compassSvg');
+        const compassViewport = document.getElementById('compassViewport');
+        const currentSunDot = document.getElementById('currentSunDot');
+        const targetSunDot = document.getElementById('targetSunDot');
+        const calcBtn = document.getElementById('calcBtn');
+        const startOverlay = document.getElementById('startOverlay');
+        const startBtn = document.getElementById('startBtn');
+
+        let userLat = null;
+        let userLon = null;
+        let currentHeading = 0;
+        let lastRawHeading = 0;
+        let unwrappedHeading = 0;
+        let isLocked = false;
+        let isCalculating = false;
+        let needSyncAfterUnlock = false;
+        let compassReady = false;
+        let currentSunAzimuth = 0;
+        let targetAzimuth = null;
+
+        // ==================== SUNCalc ====================
+        function getSolarPosition(date, lat, lon) {
+            if (!lat || !lon || isNaN(lat) || isNaN(lon) || !window.SunCalc) 
+                return { azimuth: 0, altitude: -90 };
+            try {
+                const pos = window.SunCalc.getPosition(date, lat, lon);
+                let azimuth = (pos.azimuth * (180 / Math.PI) + 180) % 360;
+                azimuth = (azimuth + 360) % 360;
+                
+                const altitude = pos.altitude * (180 / Math.PI);
+                return { azimuth, altitude };
+            } catch (e) {
+                console.error('SunCalc error:', e);
+                return { azimuth: 0, altitude: -90 };
+            }
+        }
+
+        const angDiff = (a, b) => {
+            let d = Math.abs(a - b) % 360;
+            return Math.min(d, 360 - d);
+        };
+
+        function setSvgDotPosition(dotElement, azimuth, radius) {
+            const rad = (azimuth - 90) * Math.PI / 180;
+            const cx = 150 + radius * Math.cos(rad);
+            const cy = 150 + radius * Math.sin(rad);
+            dotElement.setAttribute('cx', cx);
+            dotElement.setAttribute('cy', cy);
+        }
+
+        function updateCurrentSunPosition() {
+            if (userLat === null || userLon === null) return;
+            const now = new Date();
+            const pos = getSolarPosition(now, userLat, userLon);
+            currentSunAzimuth = pos.azimuth;
+
+            if (pos.altitude <= 0.5) {
+                currentSunDot.style.display = 'none';
+            } else {
+                currentSunDot.style.display = 'block';
+                setSvgDotPosition(currentSunDot, currentSunAzimuth, 100);
+            }
+        }
+
+        function findSolarPassage(targetAzimuth, lat, lon) {
+            const now = new Date();
+            let checkDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            for (let day = 0; day < 30; day++) {
+                for (let min = 0; min < 1440; min += 5) {
+                    const testDate = new Date(checkDate.getTime() + min * 60000);
+                    if (testDate < now) continue;
+                    const pos = getSolarPosition(testDate, lat, lon);
+                    // Убрано условие pos.altitude > 0 для поиска прохождения в любое время суток
+                    if (angDiff(pos.azimuth, targetAzimuth) < 4) {
+                        let bestDate = testDate;
+                        let minDiff = Infinity;
+                        for (let f = -12; f <= 12; f++) {
+                            const fineDate = new Date(testDate.getTime() + f * 60000);
+                            const fPos = getSolarPosition(fineDate, lat, lon);
+                            const diff = angDiff(fPos.azimuth, targetAzimuth);
+                            if (diff < minDiff) {
+                                minDiff = diff;
+                                bestDate = fineDate;
+                            }
+                        }
+                        return bestDate;
+                    }
+                }
+                checkDate.setDate(checkDate.getDate() + 1);
+            }
+            return null;
+        }
+
+        function formatResult(date, lat, lon) {
+            if (!date) return { dateStr: 'Вне орбиты', timeStr: '—' };
+            const timeStr = date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+            const dTarget = new Date(date); dTarget.setHours(0,0,0,0);
+            const dNow = new Date(); dNow.setHours(0,0,0,0);
+            const diffDays = Math.round((dTarget - dNow) / 86400000);
+
+            let dateStr = '';
+            if (diffDays === 0) dateStr = 'Сегодня';
+            else if (diffDays === 1) dateStr = 'Завтра';
+            else dateStr = date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
+
+            // Проверка высоты солнца для ночных/подземных/сумеречных прохождений
+            const sunPos = getSolarPosition(date, lat, lon);
+            if (sunPos.altitude <= 0) {
+                dateStr += ' 🌑';
+            }
+
+            return { dateStr, timeStr };
+        }
+
+        // ==================== Компас и сенсоры ====================
+        function handleOrientation(e) {
+            let heading = e.webkitCompassHeading || (e.alpha !== null ? 360 - e.alpha : null);
+            if (heading !== null) {
+                requestAnimationFrame(() => {
+                    if (!compassReady) compassReady = true;
+                    if (needSyncAfterUnlock) {
+                        unwrappedHeading = heading;
+                        lastRawHeading = heading;
+                        needSyncAfterUnlock = false;
+                    }
+                    onHeadingChange(heading);
+                });
+            }
+        }
+
+        function onHeadingChange(heading) {
+            if (isLocked) return;
+
+            let diff = heading - lastRawHeading;
+            if (diff < -180) diff += 360;
+            if (diff > 180) diff -= 360;
+            unwrappedHeading += diff;
+            lastRawHeading = heading;
+            currentHeading = heading;
+
+            compassSvg.style.transform = `rotate(${-unwrappedHeading}deg)`;
+        }
+
+        function resetLock() {
+            isLocked = false;
+            isCalculating = false;
+            targetAzimuth = null;
+            needSyncAfterUnlock = true;
+            compassViewport.classList.remove('locked');
+            targetSunDot.style.display = 'none';
+            calcBtn.classList.remove('active');
+            dateLabel.textContent = '';
+            updateClock();
+            timeValue.classList.remove('dots');
+            updateCurrentSunPosition();
+        }
+
+        function executeCalculation() {
+            if (userLat === null || isCalculating || isLocked || !compassReady) return;
+            isCalculating = true;
+            isLocked = true;
+            targetAzimuth = currentHeading;
+
+            dateLabel.textContent = '';
+            timeValue.textContent = '···';
+            timeValue.classList.add('dots');
+
+            setTimeout(() => {
+                const passageDate = findSolarPassage(targetAzimuth, userLat, userLon);
+                const { dateStr, timeStr } = formatResult(passageDate, userLat, userLon);
+
+                dateLabel.textContent = dateStr;
+                timeValue.classList.remove('dots');
+                timeValue.textContent = timeStr;
+
+                setSvgDotPosition(targetSunDot, targetAzimuth, 140);
+                targetSunDot.style.display = 'block';
+
+                compassViewport.classList.add('locked');
+                calcBtn.classList.add('active');
+                isCalculating = false;
+            }, 80);
+        }
+
+        function toggleLock() {
+            if (isCalculating) return;
+            if (isLocked) resetLock();
+            else executeCalculation();
+        }
+
+        // ==================== Живые часы ====================
+        function updateClock() {
+            if (!isLocked) {
+                const now = new Date();
+                const timeStr = now.toLocaleTimeString('ru-RU', {
+                    hour: '2-digit', minute: '2-digit'
+                }).replace(':', ' ');
+                timeValue.textContent = timeStr;
+            }
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        // ==================== Запуск и Кэширование геокодирования ====================
+        startBtn.addEventListener('click', async () => {
+            startBtn.textContent = 'Подключение...';
+            startBtn.style.pointerEvents = 'none';
+
+            let permissionGranted = true;
+
+            if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+                try {
+                    const state = await DeviceOrientationEvent.requestPermission();
+                    if (state !== 'granted') {
+                        alert('Доступ к компасу запрещён. Приложение не сможет работать.');
+                        permissionGranted = false;
+                        startBtn.textContent = 'Включить компас';
+                        startBtn.style.pointerEvents = 'auto';
+                    } else {
+                        window.addEventListener('deviceorientation', handleOrientation, true);
+                    }
+                } catch (e) {
+                    console.error('Orientation permission error:', e);
+                    window.addEventListener('deviceorientation', handleOrientation, true);
+                }
+            } else {
+                window.addEventListener('deviceorientation', handleOrientation, true);
+            }
+
+            if (navigator.geolocation && permissionGranted) {
+                navigator.geolocation.getCurrentPosition(
+                    pos => {
+                        userLat = pos.coords.latitude;
+                        userLon = pos.coords.longitude;
+                        reverseGeocode(userLat, userLon);
+                        updateCurrentSunPosition();
+                        startOverlay.classList.add('hidden');
+                    },
+                    err => {
+                        console.warn('Geolocation error:', err);
+                        userLat = 55.7558;
+                        userLon = 37.6173;
+                        locationLabel.textContent = 'Москва (Демо)';
+                        updateCurrentSunPosition();
+                        startOverlay.classList.add('hidden');
+                    },
+                    { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+                );
+            } else if (!permissionGranted) {
+                // Кнопка сброшена выше
+            } else {
+                userLat = 55.7558; userLon = 37.6173;
+                locationLabel.textContent = 'Москва (Демо)';
+                updateCurrentSunPosition();
+                startOverlay.classList.add('hidden');
+            }
+        });
+
+        function reverseGeocode(lat, lon) {
+            const cacheKey = `city_${lat.toFixed(3)}_${lon.toFixed(3)}`;
+            const cachedCity = localStorage.getItem(cacheKey);
+
+            if (cachedCity) {
+                locationLabel.textContent = cachedCity;
+                return;
+            }
+
+            locationLabel.textContent = `${lat.toFixed(2)}°, ${lon.toFixed(2)}°`;
+            fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&accept-language=ru`, {
+                headers: { 'User-Agent': 'SolarCompass/1.0 (https://github.com/alexeynovopashin-lab/solar_compass)' }
+            })
+            .then(r => r.json())
+            .then(data => {
+                const city = data.address.city || data.address.town || data.address.settlement || data.address.country;
+                if (city) {
+                    locationLabel.textContent = city;
+                    localStorage.setItem(cacheKey, city);
+                }
+            }).catch(() => {});
+        }
+
+        calcBtn.addEventListener('click', toggleLock);
+        compassViewport.addEventListener('click', toggleLock);
+
+        setInterval(updateCurrentSunPosition, 60000);
+    </script>
+</body>
+</html>            justify-content: center;
             transition: opacity 0.5s ease;
         }
 
