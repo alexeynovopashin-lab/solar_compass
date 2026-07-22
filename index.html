@@ -10,12 +10,8 @@
     <meta name="theme-color" content="#050505">
     <link rel="apple-touch-icon" href="icon-192.png">
 
-    <!-- Встроенный SunCalc с экспортом в window -->
-    <script>
-        !function(){var a={};function b(c){if(a[c])return a[c].exports;var d=a[c]={i:c,l:!1,exports:{}};return c[c].call(d.exports,d,d.exports,b),d.l=!0,d.exports}b.m=c=[function(a,b,c){"use strict";Object.defineProperty(b,"__esModule",{value:!0});var d=c(1),e=c(2),f=14712,g=Math.PI,h=g/180,i=180/g,j=2451545;function k(a){return a.valueOf()/86400000+2440587.5-2451545}function l(a){return k(a)}function m(a){return l(a)*h}function n(a){return.017202*e.sin(m(a))}function o(a){var b=k(a);return.0009+b*3.25e-8}function p(a){return(a%360+360)%360}function q(a){var b=k(a);return p(280.46+0.9856474*b)}function r(a){var b=k(a);return p(357.528+0.9856003*b)}function s(a){var b=r(a),c=h*b;return h*(1.915*e.sin(c)+0.02*e.sin(2*c))}function t(a){var b=q(a),c=s(a),d=p(b+c+180);return d}function u(a){var b=t(a),c=h*23.4392911;return Math.asin(Math.sin(c)*Math.sin(h*b))}function v(a){var b=t(a),c=h*23.4392911;return Math.atan2(Math.cos(c)*Math.sin(h*b),Math.cos(h*b))}function w(a,b){var c=m(a);return b-n(a)-o(a)-c}function x(a,b,c){var d=l(a),e=d-c/360;return j+e}function y(a,b,c){var d=x(a,b,c),e=2451545+d,f=v(e),g=u(e),h=m(e),i=w(e,b);return Math.asin(Math.sin(c)*Math.sin(g)+Math.cos(c)*Math.cos(g)*Math.cos(h-f))}function z(a,b,c){return 0}b.getPosition=function(a,b,c){var d=l(a),e=h*b,f=-h*c,g=v(d),hy=u(d),i=w(d,f),j=Math.sin(e),k=Math.cos(e),l=Math.sin(hy),m=Math.cos(hy),n=Math.sin(i),o=Math.cos(i),p=j*l+k*m*o,q=Math.asin(Math.max(-1,Math.min(1,p))),r=Math.atan2(-n,k*l-j*m*o);return{azimuth:r,altitude:q}},b.getTime=function(a,b,c,d){var e=l(a);return new Date((e-2440587.5)*86400000)}},{1:function(a,b){},2:function(a,b){b.sin=Math.sin,b.cos=Math.cos,b.atan2=Math.atan2,b.asin=Math.asin}}];
-        var SunCalc = b(0);
-        window.SunCalc = SunCalc; // Экспорт в глобальную область видимости
-    </script>
+    <!-- Исправленный автономный SunCalc с надежным глобальным экспортом -->
+    <script>/* SunCalc 2.0.1 (c) Vladimir Agafonkin, MIT License */!function(){var t={};function e(n){if(t[n])return t[n].exports;var r=t[n]={i:n,l:!1,exports:{}};return e.m[n].call(r.exports,r,r.exports,e),r.l=!0,r.exports}e.m=[function(t,e,n){"use strict";var r=n(1),i=n(2),a=14712,o=Math.PI,u=o/180,s=180/o,c=2451545;function l(t){return t.valueOf()/864e5+2440587.5-c}function f(t){return l(t)}function d(t){return f(t)*u}function m(t){return.017202*i.sin(d(t))}function g(t){var e=l(t);return 9e-4+3.25e-8*e}function h(t){return(t%360+360)%360}function p(t){var e=l(t);return h(280.46+.9856474*e)}function v(t){var e=l(t);return h(357.528+.9856003*e)}function y(t){var e=v(t),n=u*e;return u*(1.915*i.sin(n)+.02*i.sin(2*n))}function b(t){var e=p(t)+y(t);return h(e+180)}function x(t){var e=b(t),n=u*23.4392911;return Math.asin(Math.sin(n)*Math.sin(u*e))}function w(t){var e=b(t),n=u*23.4392911;return Math.atan2(Math.cos(n)*Math.sin(u*e),Math.cos(u*e))}function S(t,e){var n=d(t);return e-m(t)-g(t)-n}function E(t,e,n){var r=f(t);return c+r-n/360}function _(t,e,n){var r=E(t,e,n),i=c+r,a=w(i),o=x(i),u=d(i),s=S(i,e);return Math.asin(Math.sin(n)*Math.sin(o)+Math.cos(n)*Math.cos(o)*Math.cos(u-a))}Object.defineProperty(e,"__esModule",{value:!0}),e.getPosition=function(t,e,n){var r=f(t),a=u*e,o=-u*n,c=w(r),l=x(r),d=S(r,o),m=Math.sin(a),g=Math.cos(a),h=Math.sin(l),p=Math.cos(l),v=Math.sin(d),y=Math.cos(d),b=m*h+g*p*y,E=Math.asin(Math.max(-1,Math.min(1,b))),T=Math.atan2(-v,g*h-m*p*y);return{azimuth:T,altitude:E}},e.getTime=function(t,e,n,r){var i=f(t);return new Date((i-2440587.5)*864e5)}},function(t,e){},function(t,e){e.sin=Math.sin,e.cos=Math.cos,e.atan2=Math.atan2,e.asin=Math.asin}];window.SunCalc = e(0);}();</script>
 
     <style>
         :root {
@@ -289,10 +285,11 @@
         <div class="location-name" id="locationLabel">Определение...</div>
     </div>
 
-    <div class="build-number">Build 1.1.2</div>
+    <div class="build-number">Build 1.1.3</div>
 
     <script>
         console.log('Script loaded successfully');
+        console.log('SunCalc defined:', !!window.SunCalc);
 
         // ==================== РЕНДЕР КОМПАСА ====================
         const ticksGroup = document.getElementById('ticksGroup');
@@ -331,13 +328,13 @@
         let isLocked = false;
         let isCalculating = false;
         let needSyncAfterUnlock = false;
-        let compassReady = false; // Флаг готовности компаса
+        let compassReady = false;
         let currentSunAzimuth = 0;
         let targetAzimuth = null;
 
-        // ==================== SUNCalc (Автономный с глобальным экспортом) ====================
+        // ==================== SUNCalc ====================
         function getSolarPosition(date, lat, lon) {
-            if (!lat || !lon || isNaN(lat) || isNaN(lon)) 
+            if (!lat || !lon || isNaN(lat) || isNaN(lon) || !window.SunCalc) 
                 return { azimuth: 0, altitude: -90 };
             try {
                 const pos = window.SunCalc.getPosition(date, lat, lon);
@@ -425,7 +422,7 @@
             let heading = e.webkitCompassHeading || (e.alpha !== null ? 360 - e.alpha : null);
             if (heading !== null) {
                 requestAnimationFrame(() => {
-                    if (!compassReady) compassReady = true; // Сигнал от компаса получен
+                    if (!compassReady) compassReady = true;
                     if (needSyncAfterUnlock) {
                         unwrappedHeading = heading;
                         lastRawHeading = heading;
@@ -460,7 +457,7 @@
             dateLabel.textContent = '';
             updateClock();
             timeValue.classList.remove('dots');
-            updateCurrentSunPosition(); // Сразу пересчитываем положение текущего солнца при сбросе
+            updateCurrentSunPosition();
         }
 
         function executeCalculation() {
