@@ -383,19 +383,19 @@
         <div class="viewport-notch"></div>
         <div class="center-dot"></div>
         
-        <svg class="compass-svg" id="compassSvg" viewBox="0 0 300 300">
-            <circle cx="150" cy="150" r="160" stroke="rgba(255,255,255,0.08)" stroke-width="1" fill="none"/>
-            <circle cx="150" cy="150" r="115" stroke="rgba(255,255,255,0.1)" stroke-width="1" stroke-dasharray="2 4" fill="none"/>
+        <svg class="compass-svg" id="compassSvg" viewBox="0 0 340 340">
+            <circle cx="170" cy="170" r="160" stroke="rgba(255,255,255,0.08)" stroke-width="1" fill="none"/>
+            <circle cx="170" cy="170" r="115" stroke="rgba(255,255,255,0.1)" stroke-width="1" stroke-dasharray="2 4" fill="none"/>
             
             <g id="ticksGroup"></g>
 
-            <text x="150" y="24" fill="#ffd25f" font-size="14" font-weight="600" text-anchor="middle">N</text>
-            <text x="298" y="154" fill="rgba(255,255,255,0.4)" font-size="14" font-weight="500" text-anchor="middle">E</text>
-            <text x="150" y="290" fill="rgba(255,255,255,0.4)" font-size="14" font-weight="500" text-anchor="middle">S</text>
-            <text x="2" y="154" fill="rgba(255,255,255,0.4)" font-size="14" font-weight="500" text-anchor="middle">W</text>
+            <text x="170" y="32" fill="#ffd25f" font-size="14" font-weight="600" text-anchor="middle">N</text>
+            <text x="316" y="174" fill="rgba(255,255,255,0.4)" font-size="14" font-weight="500" text-anchor="middle">E</text>
+            <text x="170" y="320" fill="rgba(255,255,255,0.4)" font-size="14" font-weight="500" text-anchor="middle">S</text>
+            <text x="24" y="174" fill="rgba(255,255,255,0.4)" font-size="14" font-weight="500" text-anchor="middle">W</text>
 
-            <circle id="currentSunDot" cx="150" cy="50" r="5" fill="#ffffff" filter="drop-shadow(0 0 6px rgba(255,255,255,0.9))" style="display: none;" />
-            <circle id="targetSunDot" cx="150" cy="10" r="7" fill="#ffd25f" filter="drop-shadow(0 0 10px #ffd25f)" style="display: none;" />
+            <circle id="currentSunDot" cx="170" cy="50" r="5" fill="#ffffff" filter="drop-shadow(0 0 6px rgba(255,255,255,0.9))" style="display: none;" />
+            <circle id="targetSunDot" cx="170" cy="10" r="7" fill="#ffd25f" filter="drop-shadow(0 0 10px #ffd25f)" style="display: none;" />
         </svg>
     </div>
 
@@ -406,25 +406,29 @@
         <div class="location-name" id="locationLabel">Определение...</div>
     </div>
 
-    <div class="build-number">Build 1.2.1</div>
+    <div class="build-number">Build 1.2.2</div>
 
     <script>
         console.log('Script loaded successfully');
         console.log('SunCalc defined:', !!window.SunCalc);
 
-        // ==================== РЕНДЕР КОМПАСА (УВЕЛИЧЕННЫЕ РАДИУСЫ) ====================
+        // ==================== РЕНДЕР КОМПАСА (ИСПРАВЛЕННЫЙ ЦЕНТР 170) ====================
         const ticksGroup = document.getElementById('ticksGroup');
+        const cx = 170, cy = 170;
+        const r1 = 160;
+        const r2_major = r1 - 12;
+        const r2_minor = r1 - 6;
+
         for (let i = 0; i < 360; i += 5) {
             const isMajor = i % 30 === 0;
-            const r1 = 160;                          // внешний радиус увеличен
-            const r2 = r1 - (isMajor ? 12 : 6);     // длина рисок пропорциональна
+            const r2 = isMajor ? r2_major : r2_minor;
             const rad = (i - 90) * Math.PI / 180;
             
             const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-            line.setAttribute('x1', 150 + r1 * Math.cos(rad));
-            line.setAttribute('y1', 150 + r1 * Math.sin(rad));
-            line.setAttribute('x2', 150 + r2 * Math.cos(rad));
-            line.setAttribute('y2', 150 + r2 * Math.sin(rad));
+            line.setAttribute('x1', cx + r1 * Math.cos(rad));
+            line.setAttribute('y1', cy + r1 * Math.sin(rad));
+            line.setAttribute('x2', cx + r2 * Math.cos(rad));
+            line.setAttribute('y2', cy + r2 * Math.sin(rad));
             line.setAttribute('stroke', isMajor ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.1)');
             line.setAttribute('stroke-width', isMajor ? '1.5' : '1');
             ticksGroup.appendChild(line);
@@ -477,10 +481,10 @@
 
         function setSvgDotPosition(dotElement, azimuth, radius) {
             const rad = (azimuth - 90) * Math.PI / 180;
-            const cx = 150 + radius * Math.cos(rad);
-            const cy = 150 + radius * Math.sin(rad);
-            dotElement.setAttribute('cx', cx);
-            dotElement.setAttribute('cy', cy);
+            const dcx = 170 + radius * Math.cos(rad);
+            const dcy = 170 + radius * Math.sin(rad);
+            dotElement.setAttribute('cx', dcx);
+            dotElement.setAttribute('cy', dcy);
         }
 
         function updateCurrentSunPosition() {
