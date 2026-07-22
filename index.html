@@ -11,7 +11,6 @@
             --text-secondary: rgba(255, 255, 255, 0.4);
             --accent-sun: #ffd25f;
             --accent-glow: rgba(255, 210, 95, 0.4);
-            --compass-line: rgba(255, 255, 255, 0.15);
         }
 
         * {
@@ -37,7 +36,6 @@
             -webkit-tap-highlight-color: transparent;
         }
 
-        /* Атмосферный фоновый градиент */
         body::before {
             content: "";
             position: absolute;
@@ -51,7 +49,59 @@
             z-index: 0;
         }
 
-        /* Верхний блок: Главное время и дата */
+        /* --- СТАРТОВЫЙ ЭКРАН (PWA FIX) --- */
+        .start-overlay {
+            position: fixed;
+            inset: 0;
+            background: var(--bg);
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            transition: opacity 0.6s ease, backdrop-filter 0.6s ease;
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+        }
+
+        .start-overlay.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .start-icon {
+            font-size: 48px;
+            margin-bottom: 24px;
+            opacity: 0.9;
+        }
+
+        .start-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            color: var(--text-primary);
+            padding: 16px 36px;
+            border-radius: 100px;
+            font-size: 16px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: transform 0.2s, background 0.2s;
+            margin-bottom: 16px;
+        }
+
+        .start-btn:active {
+            transform: scale(0.96);
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        .start-hint {
+            font-size: 13px;
+            color: var(--text-secondary);
+            text-align: center;
+            max-width: 220px;
+            line-height: 1.4;
+        }
+
+        /* --- ОСНОВНОЙ ИНТЕРФЕЙС --- */
         .display-header {
             position: relative;
             z-index: 1;
@@ -91,7 +141,6 @@
             color: var(--text-secondary);
         }
 
-        /* Центральный компас */
         .compass-viewport {
             position: relative;
             z-index: 1;
@@ -114,7 +163,6 @@
             transition: transform 0.1s linear;
         }
 
-        /* Солнце на компасе */
         .sun-marker {
             position: absolute;
             top: 10px;
@@ -134,7 +182,6 @@
             opacity: 1;
         }
 
-        /* Визирный луч к центру */
         .target-line {
             position: absolute;
             top: 26px;
@@ -152,7 +199,6 @@
             opacity: 0.6;
         }
 
-        /* Точка центра */
         .center-dot {
             position: absolute;
             width: 4px;
@@ -163,15 +209,10 @@
             opacity: 0.5;
         }
 
-        /* Нижний блок: Геолокация и контролы */
         .footer-meta {
             position: relative;
             z-index: 1;
             text-align: center;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 16px;
         }
 
         .location-name {
@@ -180,50 +221,32 @@
             color: var(--text-secondary);
             letter-spacing: 0.2px;
         }
-
-        .action-btn {
-            background: rgba(255, 255, 255, 0.08);
-            border: none;
-            color: var(--text-primary);
-            padding: 12px 24px;
-            border-radius: 100px;
-            font-size: 14px;
-            font-weight: 500;
-            cursor: pointer;
-            backdrop-filter: blur(10px);
-            transition: background 0.2s, transform 0.1s;
-        }
-
-        .action-btn:active {
-            transform: scale(0.96);
-            background: rgba(255, 255, 255, 0.15);
-        }
-
-        .hidden {
-            display: none !important;
-        }
     </style>
 </head>
 <body>
 
-    <!-- Верхний блок -->
+    <!-- Стартовый экран для инициализации сенсоров -->
+    <div class="start-overlay" id="startOverlay">
+        <div class="start-icon">🧭</div>
+        <button class="start-btn" id="startBtn">Начать калибровку</button>
+        <div class="start-hint">Для расчета траектории нужен доступ к геопозиции и гироскопу</div>
+    </div>
+
+    <!-- Основной интерфейс -->
     <div class="display-header">
         <div class="date-label" id="dateLabel">Наведитесь</div>
         <div class="time-value" id="timeValue"></div>
     </div>
 
-    <!-- Компас -->
     <div class="compass-viewport" id="compassViewport">
         <div class="target-line" id="targetLine"></div>
         <div class="sun-marker" id="sunMarker"></div>
         <div class="center-dot"></div>
         
         <svg class="compass-svg" id="compassSvg" viewBox="0 0 300 300">
-            <!-- Внешние и внутренние кольца -->
             <circle cx="150" cy="150" r="142" stroke="rgba(255,255,255,0.08)" stroke-width="1" fill="none"/>
             <circle cx="150" cy="150" r="125" stroke="rgba(255,255,255,0.04)" stroke-width="1" fill="none"/>
             <g id="ticksGroup"></g>
-            <!-- Стороны света -->
             <text x="150" y="42" fill="#ffd25f" font-size="13" font-weight="600" text-anchor="middle">N</text>
             <text x="262" y="154" fill="rgba(255,255,255,0.4)" font-size="13" font-weight="500" text-anchor="middle">E</text>
             <text x="150" y="268" fill="rgba(255,255,255,0.4)" font-size="13" font-weight="500" text-anchor="middle">S</text>
@@ -231,37 +254,30 @@
         </svg>
     </div>
 
-    <!-- Нижняя панель -->
     <div class="footer-meta">
-        <div class="location-name" id="locationLabel">Определение...</div>
-        <button class="action-btn hidden" id="permBtn">Включить компас</button>
+        <div class="location-name" id="locationLabel">—</div>
     </div>
 
     <script>
-        // --- РЕНДЕР РИСОК КОМПАСА (SVG) ---
+        // Отрисовка рисок компаса
         const ticksGroup = document.getElementById('ticksGroup');
         for (let i = 0; i < 360; i += 5) {
             const isMajor = i % 30 === 0;
-            const length = isMajor ? 10 : 5;
             const r1 = 142;
-            const r2 = r1 - length;
+            const r2 = r1 - (isMajor ? 10 : 5);
             const rad = (i - 90) * Math.PI / 180;
-            const x1 = 150 + r1 * Math.cos(rad);
-            const y1 = 150 + r1 * Math.sin(rad);
-            const x2 = 150 + r2 * Math.cos(rad);
-            const y2 = 150 + r2 * Math.sin(rad);
-
+            
             const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-            line.setAttribute('x1', x1);
-            line.setAttribute('y1', y1);
-            line.setAttribute('x2', x2);
-            line.setAttribute('y2', y2);
+            line.setAttribute('x1', 150 + r1 * Math.cos(rad));
+            line.setAttribute('y1', 150 + r1 * Math.sin(rad));
+            line.setAttribute('x2', 150 + r2 * Math.cos(rad));
+            line.setAttribute('y2', 150 + r2 * Math.sin(rad));
             line.setAttribute('stroke', isMajor ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.1)');
             line.setAttribute('stroke-width', isMajor ? '1.5' : '1');
             ticksGroup.appendChild(line);
         }
 
-        // --- DOM И ПЕРЕМЕННЫЕ СОСТОЯНИЯ ---
+        // Переменные
         const dateLabel = document.getElementById('dateLabel');
         const timeValue = document.getElementById('timeValue');
         const locationLabel = document.getElementById('locationLabel');
@@ -269,25 +285,71 @@
         const compassViewport = document.getElementById('compassViewport');
         const sunMarker = document.getElementById('sunMarker');
         const targetLine = document.getElementById('targetLine');
-        const permBtn = document.getElementById('permBtn');
+        
+        const startOverlay = document.getElementById('startOverlay');
+        const startBtn = document.getElementById('startBtn');
 
         let userLat = null;
         let userLon = null;
         let currentHeading = 0;
         let lastRawHeading = 0;
         let unwrappedHeading = 0;
-
         let motionTimer = null;
         let isSearching = false;
-        let lastSearchResultKey = '';
 
-        // --- ТОЧНАЯ АСТРОНОМИЯ (NOAA Solar Algorithm) ---
+        // Инициализация по тапу (Критично для iOS Safari/PWA)
+        startBtn.addEventListener('click', async () => {
+            startBtn.textContent = 'Инициализация...';
+            startBtn.style.pointerEvents = 'none';
+
+            let orientationGranted = false;
+
+            // 1. Запрос Гироскопа
+            if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+                try {
+                    const state = await DeviceOrientationEvent.requestPermission();
+                    if (state === 'granted') {
+                        orientationGranted = true;
+                        window.addEventListener('deviceorientation', handleOrientation, true);
+                    } else {
+                        startBtn.textContent = 'Отказано в доступе';
+                        return; // Без компаса не продолжаем
+                    }
+                } catch (e) {
+                    console.error(e);
+                    startBtn.textContent = 'Ошибка компаса';
+                    return;
+                }
+            } else {
+                orientationGranted = true;
+                window.addEventListener('deviceorientation', handleOrientation, true);
+            }
+
+            // 2. Запрос Геолокации
+            if (navigator.geolocation && orientationGranted) {
+                navigator.geolocation.getCurrentPosition(
+                    pos => {
+                        userLat = pos.coords.latitude;
+                        userLon = pos.coords.longitude;
+                        reverseGeocode(userLat, userLon);
+                        startOverlay.classList.add('hidden'); // Убираем шторку
+                    },
+                    err => {
+                        // Фолбэк если не дали локацию
+                        userLat = 55.7558;
+                        userLon = 37.6173;
+                        locationLabel.textContent = 'Демо: Москва';
+                        startOverlay.classList.add('hidden');
+                    },
+                    { enableHighAccuracy: true, timeout: 6000 }
+                );
+            }
+        });
+
+        // Астрономия (NOAA)
         const toRad = d => d * Math.PI / 180;
         const toDeg = r => r * 180 / Math.PI;
-
-        function getJulianDate(date) {
-            return (date.getTime() / 1000 / 86400.0) + 2440587.5;
-        }
+        function getJulianDate(date) { return (date.getTime() / 1000 / 86400.0) + 2440587.5; }
 
         function getSolarPosition(jd, lat, lon) {
             const d = jd - 2451545.0;
@@ -311,28 +373,21 @@
                 -Math.sin(toRad(hourAngle)),
                 Math.cos(toRad(lat)) * Math.tan(toRad(delta)) - Math.sin(toRad(lat)) * Math.cos(toRad(hourAngle))
             ));
-            azimuth = (azimuth + 360) % 360;
-
-            return { azimuth, altitude };
+            return { azimuth: (azimuth + 360) % 360, altitude };
         }
 
-        // Квантовый быстрой поиск без перегрузки CPU (~40 вычислений вместо 8760)
         function findSolarPassage(targetAzimuth, lat, lon) {
             const now = new Date();
             const startJd = getJulianDate(now);
-
             for (let day = 0; day < 365; day++) {
                 const dayJd = startJd + day;
-                for (let h = 0; h < 24; h += 1) { // Шаг 1 час
+                for (let h = 0; h < 24; h += 1) {
                     const jd = dayJd + (h / 24);
                     const pos = getSolarPosition(jd, lat, lon);
-
-                    if (pos.altitude > 0) { // Ищем только видимое солнце
+                    if (pos.altitude > 0) {
                         let dAz = Math.abs(pos.azimuth - targetAzimuth);
-                        dAz = Math.min(dAz, 360 - dAz);
-
-                        if (dAz < 7.5) { // Точное бинарное уточнение
-                            return refinePassage(jd - (1 / 24), jd + (1 / 24), targetAzimuth, lat, lon);
+                        if (Math.min(dAz, 360 - dAz) < 7.5) {
+                            return refinePassage(jd - (1/24), jd + (1/24), targetAzimuth, lat, lon);
                         }
                     }
                 }
@@ -340,8 +395,7 @@
             return null;
         }
 
-        function refinePassage(lowJd, highJd, targetAzimuth, lat, lon) {
-            let lo = lowJd, hi = highJd;
+        function refinePassage(lo, hi, targetAzimuth, lat, lon) {
             for (let i = 0; i < 12; i++) {
                 const mid = (lo + hi) / 2;
                 const pMid = getSolarPosition(mid, lat, lon);
@@ -354,28 +408,27 @@
 
                 dLo < dMid ? (hi = mid) : (lo = mid);
             }
-            const finalJd = (lo + hi) / 2;
-            return new Date((finalJd - 2440587.5) * 86400 * 1000);
+            return new Date(((lo + hi) / 2 - 2440587.5) * 86400 * 1000);
         }
 
-        // --- ФОРМАТИРОВАНИЕ В СТИЛЕ APPLE ---
         function formatResult(date) {
             if (!date) return { dateStr: 'Вне орбиты', timeStr: '' };
-
-            const now = new Date();
             const diffDays = Math.floor((date.setHours(0,0,0,0) - new Date().setHours(0,0,0,0)) / 86400000);
             const timeStr = date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-
             if (diffDays === 0) return { dateStr: 'Сегодня', timeStr };
             if (diffDays === 1) return { dateStr: 'Завтра', timeStr };
-
-            const dateStr = date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
-            return { dateStr, timeStr };
+            return { dateStr: date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' }), timeStr };
         }
 
-        // --- ОБРАБОТКА ДВИЖЕНИЯ И ПОИСКА ---
+        // Логика компаса и UI
+        function handleOrientation(e) {
+            let heading = e.webkitCompassHeading || (e.alpha !== null ? 360 - e.alpha : null);
+            if (heading !== null) {
+                requestAnimationFrame(() => onHeadingChange((heading + 360) % 360));
+            }
+        }
+
         function onHeadingChange(heading) {
-            // Расчет плавной неразрывной ориентации (без дерганий 359° -> 1°)
             let diff = heading - lastRawHeading;
             if (diff < -180) diff += 360;
             if (diff > 180) diff -= 360;
@@ -386,7 +439,6 @@
             compassSvg.style.transform = `rotate(${-unwrappedHeading}deg)`;
             sunMarker.style.transform = `translateX(-50%) rotate(${unwrappedHeading}deg)`;
 
-            // Сброс фиксации при движении
             compassViewport.classList.remove('locked');
             sunMarker.classList.remove('active');
             targetLine.classList.remove('active');
@@ -397,26 +449,20 @@
                 timeValue.classList.remove('dots');
             }
 
-            // Детектор остановки устройства (0.4 сек покоя)
             clearTimeout(motionTimer);
-            motionTimer = setTimeout(() => {
-                executeSearch();
-            }, 400);
+            motionTimer = setTimeout(executeSearch, 400);
         }
 
         function executeSearch() {
-            if (userLat === null) return;
-
+            if (userLat === null) return; // Теперь это не сработает вхолостую
             isSearching = true;
             dateLabel.textContent = '';
             timeValue.textContent = '···';
             timeValue.classList.add('dots');
 
-            // Небольшая задержка для ощущения «работы» прибора
             setTimeout(() => {
                 const passageDate = findSolarPassage(currentHeading, userLat, userLon);
                 const { dateStr, timeStr } = formatResult(passageDate);
-
                 dateLabel.textContent = dateStr;
                 timeValue.classList.remove('dots');
                 timeValue.textContent = timeStr;
@@ -426,66 +472,19 @@
                     sunMarker.classList.add('active');
                     targetLine.classList.add('active');
                 }
-
                 isSearching = false;
-            }, 250);
-        }
-
-        // --- ГЕОЛОКАЦИЯ И ДАТЧИКИ ---
-        function initSensors() {
-            if (typeof DeviceOrientationEvent !== 'undefined' &&
-                typeof DeviceOrientationEvent.requestPermission === 'function') {
-                permBtn.classList.remove('hidden');
-                permBtn.addEventListener('click', () => {
-                    DeviceOrientationEvent.requestPermission().then(state => {
-                        if (state === 'granted') {
-                            permBtn.classList.add('hidden');
-                            window.addEventListener('deviceorientation', handleOrientation, true);
-                        }
-                    });
-                });
-            } else {
-                window.addEventListener('deviceorientation', handleOrientation, true);
-            }
-
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(
-                    pos => {
-                        userLat = pos.coords.latitude;
-                        userLon = pos.coords.longitude;
-                        reverseGeocode(userLat, userLon);
-                    },
-                    () => {
-                        // Fallback: Москва
-                        userLat = 55.7558;
-                        userLon = 37.6173;
-                        locationLabel.textContent = 'Москва';
-                    }
-                );
-            }
-        }
-
-        function handleOrientation(e) {
-            let heading = e.webkitCompassHeading || (e.alpha !== null ? 360 - e.alpha : null);
-            if (heading !== null) {
-                requestAnimationFrame(() => onHeadingChange((heading + 360) % 360));
-            }
+            }, 200);
         }
 
         function reverseGeocode(lat, lon) {
-            // Быстрое определение крупных городов без тяжелых API
             locationLabel.textContent = `${lat.toFixed(2)}°, ${lon.toFixed(2)}°`;
             fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&accept-language=ru`)
                 .then(r => r.json())
                 .then(data => {
                     const city = data.address.city || data.address.town || data.address.settlement;
                     if (city) locationLabel.textContent = city;
-                })
-                .catch(() => {});
+                }).catch(() => {});
         }
-
-        // Старт
-        initSensors();
     </script>
 </body>
 </html>
