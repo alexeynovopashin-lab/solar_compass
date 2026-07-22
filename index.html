@@ -480,12 +480,8 @@
             <circle cx="170" cy="170" r="115" stroke="rgba(255,255,255,0.1)" stroke-width="1" stroke-dasharray="2 4" fill="none"/>
             
             <g id="ticksGroup"></g>
-
-            <!-- Буквы сдвинуты на радиус 162, чтобы не перекрывать деления -->
-            <text x="170" y="8" fill="#ffd25f" font-size="14" font-weight="600" text-anchor="middle">N</text>
-            <text x="332" y="174" fill="rgba(255,255,255,0.4)" font-size="14" font-weight="500" text-anchor="middle">E</text>
-            <text x="170" y="332" fill="rgba(255,255,255,0.4)" font-size="14" font-weight="500" text-anchor="middle">S</text>
-            <text x="8" y="174" fill="rgba(255,255,255,0.4)" font-size="14" font-weight="500" text-anchor="middle">W</text>
+            <!-- Буквы будут отрисованы динамически в эту группу -->
+            <g id="lettersGroup"></g>
 
             <circle id="currentSunDot" cx="170" cy="50" r="5" fill="#ffffff" filter="drop-shadow(0 0 6px rgba(255,255,255,0.9))" style="display: none;" />
             <circle id="targetSunDot" cx="170" cy="10" r="7" fill="#ffd25f" filter="drop-shadow(0 0 10px #ffd25f)" style="display: none;" />
@@ -499,7 +495,7 @@
         <div class="location-name" id="locationLabel">Определение...</div>
     </div>
 
-    <div class="build-number">Build 1.3.0</div>
+    <div class="build-number">Build 1.3.1</div>
 
     <script>
         console.log('Script loaded successfully');
@@ -507,6 +503,7 @@
 
         // ==================== РЕНДЕР КОМПАСА ====================
         const ticksGroup = document.getElementById('ticksGroup');
+        const lettersGroup = document.getElementById('lettersGroup');
         const cx = 170, cy = 170;
         const r1 = 160;
         const r2_major = r1 - 12;
@@ -526,6 +523,33 @@
             line.setAttribute('stroke-width', isMajor ? '1.5' : '1');
             ticksGroup.appendChild(line);
         }
+
+        // ==================== ОТРИСОВКА БУКВ СТОРОН СВЕТА ====================
+        // Единственная переменная для настройки: расстояние от центра до букв
+        const LETTER_OFFSET = 168;   // ← меняйте это число, чтобы двигать буквы (168 — за кругом 160)
+
+        const directions = [
+            { label: 'N', angle: 0, fill: '#ffd25f', weight: '600' },
+            { label: 'E', angle: 90, fill: 'rgba(255,255,255,0.4)', weight: '500' },
+            { label: 'S', angle: 180, fill: 'rgba(255,255,255,0.4)', weight: '500' },
+            { label: 'W', angle: 270, fill: 'rgba(255,255,255,0.4)', weight: '500' }
+        ];
+
+        directions.forEach(dir => {
+            const rad = (dir.angle - 90) * Math.PI / 180;
+            const x = 170 + LETTER_OFFSET * Math.cos(rad);
+            const y = 170 + LETTER_OFFSET * Math.sin(rad);
+            
+            const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            text.setAttribute('x', x);
+            text.setAttribute('y', y + 4); // небольшая корректировка для вертикального центрирования
+            text.setAttribute('fill', dir.fill);
+            text.setAttribute('font-size', '14');
+            text.setAttribute('font-weight', dir.weight);
+            text.setAttribute('text-anchor', 'middle');
+            text.textContent = dir.label;
+            lettersGroup.appendChild(text);
+        });
 
         const dateLabel = document.getElementById('dateLabel');
         const timeValue = document.getElementById('timeValue');
