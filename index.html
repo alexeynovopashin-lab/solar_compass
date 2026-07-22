@@ -151,6 +151,7 @@
             transition: transform 0.1s linear;
         }
 
+        /* Метка искомого солнца (при замере) */
         .sun-marker {
             position: absolute;
             top: 10px;
@@ -168,6 +169,21 @@
 
         .sun-marker.active {
             opacity: 1;
+        }
+
+        /* Метка текущего положения солнца на орбите */
+        .current-sun-marker {
+            position: absolute;
+            top: 38px; /* Расположена на внутреннем орбитальном кольце */
+            left: 50%;
+            width: 8px;
+            height: 8px;
+            margin-left: -4px;
+            background: #ffffff;
+            border-radius: 50%;
+            box-shadow: 0 0 10px rgba(255,255,255,0.8);
+            z-index: 3;
+            transition: transform 0.1s linear;
         }
 
         .target-line {
@@ -257,7 +273,6 @@
             letter-spacing: 0.2px;
         }
 
-        /* --- НОМЕР СБОРКИ --- */
         .build-number {
             position: absolute;
             bottom: 12px;
@@ -278,22 +293,26 @@
         <button class="start-btn" id="startBtn">Включить компас</button>
     </div>
 
-    <!-- Заголовок -->
+    <!-- Заголовок (без лишнего текста) -->
     <div class="display-header">
-        <div class="date-label" id="dateLabel">Наведитесь</div>
+        <div class="date-label" id="dateLabel"></div>
         <div class="time-value" id="timeValue"></div>
     </div>
 
-    <!-- Компас -->
+    <!-- Компас с орбитальным кольцом текущего солнца -->
     <div class="compass-viewport" id="compassViewport">
         <div class="target-line" id="targetLine"></div>
         <div class="sun-marker" id="sunMarker"></div>
+        <div class="current-sun-marker" id="currentSunMarker"></div>
         <div class="center-dot"></div>
         
         <svg class="compass-svg" id="compassSvg" viewBox="0 0 300 300">
+            <!-- Внешнее кольцо компаса -->
             <circle cx="150" cy="150" r="142" stroke="rgba(255,255,255,0.08)" stroke-width="1" fill="none"/>
-            <circle cx="150" cy="150" r="125" stroke="rgba(255,255,255,0.04)" stroke-width="1" fill="none"/>
+            <!-- Внутреннее орбитальное кольцо текущего солнца -->
+            <circle cx="150" cy="150" r="112" stroke="rgba(255,255,255,0.12)" stroke-width="1" stroke-dasharray="3 3" fill="none"/>
             <g id="ticksGroup"></g>
+            <!-- Стороны света (Север сохранен) -->
             <text x="150" y="42" fill="#ffd25f" font-size="13" font-weight="600" text-anchor="middle">N</text>
             <text x="262" y="154" fill="rgba(255,255,255,0.4)" font-size="13" font-weight="500" text-anchor="middle">E</text>
             <text x="150" y="268" fill="rgba(255,255,255,0.4)" font-size="13" font-weight="500" text-anchor="middle">S</text>
@@ -309,7 +328,7 @@
         <div class="location-name" id="locationLabel">Определение...</div>
     </div>
 
-    <div class="build-number">Build 1.0.3</div>
+    <div class="build-number">Build 1.0.4</div>
 
     <script>
         // 1. Рендер рисок компаса
@@ -336,6 +355,7 @@
         const compassSvg = document.getElementById('compassSvg');
         const compassViewport = document.getElementById('compassViewport');
         const sunMarker = document.getElementById('sunMarker');
+        const currentSunMarker = document.getElementById('currentSunMarker');
         const targetLine = document.getElementById('targetLine');
         const calcBtn = document.getElementById('calcBtn');
         const startOverlay = document.getElementById('startOverlay');
@@ -347,6 +367,7 @@
         let lastRawHeading = 0;
         let unwrappedHeading = 0;
         let isLocked = false;
+        let currentSunAzimuth = 0;
 
         // 2. Инициализация (iOS PWA)
         startBtn.addEventListener('click', async () => {
@@ -375,12 +396,14 @@
                         userLat = pos.coords.latitude;
                         userLon = pos.coords.longitude;
                         reverseGeocode(userLat, userLon);
+                        updateCurrentSunPosition();
                         startOverlay.classList.add('hidden');
                     },
                     err => {
                         userLat = 55.7558;
                         userLon = 37.6173;
                         locationLabel.textContent = 'Москва (Демо)';
+                        updateCurrentSunPosition();
                         startOverlay.classList.add('hidden');
                     },
                     { enableHighAccuracy: true, timeout: 6000 }
@@ -424,30 +447,39 @@
             return { azimuth: (azimuth + 360) % 360, altitude };
         }
 
-        // Новый точный алгоритм поиска: шаг полчаса -> минутное сканирование (Исключает баг с 00:00)
+        // Обновление положения текущего солнца прямо сейчас
+        function updateCurrentSunPosition() {
+            if (userLat === null || userLon === null) return;
+            const now = new Date();
+            const jd = getJulianDate(now);
+            const pos = getSolarPosition(jd, userLat, userLon);
+            currentSunAzimuth = pos.azimuth;
+            
+            // Если солнце под горизонтом, скрываем маркер текущего солнца
+            if (pos.altitude <= 0) {
+                currentSunMarker.style.display = 'none';
+            } else {
+                currentSunMarker.style.display = 'block';
+            }
+        }
+
         function findSolarPassage(targetAzimuth, lat, lon) {
             const now = new Date();
-            // Начинаем ровно с начала текущего дня (чтобы не пропустить утреннее солнце, если ищем днем)
             const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
             const startJd = getJulianDate(todayStart);
 
             for (let day = 0; day < 365; day++) {
                 const dayJd = startJd + day;
                 
-                // Проходим каждые 30 минут
                 for (let h = 0; h < 24; h += 0.5) {
                     const jd = dayJd + (h / 24);
                     const pos = getSolarPosition(jd, lat, lon);
                     
-                    // Ищем только солнце над горизонтом
                     if (pos.altitude > 0) {
-                        // Если мы в радиусе 6 градусов от цели — замедляемся и ищем поминутно
                         if (angDiff(pos.azimuth, targetAzimuth) < 6) {
-                            
                             let bestJd = jd;
                             let minDiff = Infinity;
                             
-                            // Сканируем ± 45 минут вокруг найденной точки с шагом в 1 минуту
                             for (let m = -45; m <= 45; m++) {
                                 let minuteJd = jd + (m / 1440);
                                 let mPos = getSolarPosition(minuteJd, lat, lon);
@@ -458,7 +490,6 @@
                                     bestJd = minuteJd;
                                 }
                             }
-                            // Возвращаем точное время
                             return new Date((bestJd - 2440587.5) * 86400 * 1000);
                         }
                     }
@@ -467,7 +498,6 @@
             return null;
         }
 
-        // Безопасное форматирование без мутаций
         function formatResult(date) {
             if (!date) return { dateStr: 'Вне орбиты', timeStr: '—' };
 
@@ -504,8 +534,15 @@
             lastRawHeading = heading;
             currentHeading = heading;
 
+            // Вращение диска компаса
             compassSvg.style.transform = `rotate(${-unwrappedHeading}deg)`;
+            
+            // Вращение маркера искомого солнца
             sunMarker.style.transform = `translateX(-50%) rotate(${unwrappedHeading}deg)`;
+
+            // Синхронизация маркера текущего солнца на орбитальном кольце с учетом поворота телефона
+            const relativeSunAngle = currentSunAzimuth + unwrappedHeading;
+            currentSunMarker.style.transform = `rotate(${relativeSunAngle}deg) translateY(-112px) rotate(${-relativeSunAngle}deg)`;
         }
 
         function resetLock() {
@@ -514,7 +551,7 @@
             sunMarker.classList.remove('active');
             targetLine.classList.remove('active');
             calcBtn.classList.remove('active');
-            dateLabel.textContent = 'Наведитесь';
+            dateLabel.textContent = '';
             timeValue.textContent = '';
             timeValue.classList.remove('dots');
         }
