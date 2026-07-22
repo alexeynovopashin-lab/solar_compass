@@ -384,6 +384,7 @@
                     const testDate = new Date(checkDate.getTime() + min * 60000);
                     if (testDate < now) continue;
                     const pos = getSolarPosition(testDate, lat, lon);
+                    // Ищем прохождение азимута даже под горизонтом
                     if (angDiff(pos.azimuth, targetAzimuth) < 4) {
                         let bestDate = testDate;
                         let minDiff = Infinity;
@@ -513,54 +514,33 @@
         setInterval(updateClock, 1000);
         updateClock();
 
-        // ==================== Запуск с защитой от зависания промиса ====================
+        // ==================== Запуск и Кэширование геокодирования ====================
         startBtn.addEventListener('click', async () => {
             startBtn.textContent = 'Подключение...';
             startBtn.style.pointerEvents = 'none';
 
             let permissionGranted = true;
 
-            // Функция-обертка с таймаутом, чтобы промис requestPermission никогда не вешал поток навсегда
-            async function requestOrientationWithTimeout() {
-                if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-                    let timeoutId;
-                    try {
-                        const permissionPromise = DeviceOrientationEvent.requestPermission();
-                        const timeoutPromise = new Promise((_, reject) => 
-                            timeoutId = setTimeout(() => reject(new Error('Permission timeout')), 3000)
-                        );
-                        
-                        const state = await Promise.race([permissionPromise, timeoutPromise]);
-                        clearTimeout(timeoutId);
-
-                        if (state !== 'granted') {
-                            alert('Доступ к компасу запрещён. Приложение не сможет работать.');
-                            permissionGranted = false;
-                        } else {
-                            window.addEventListener('deviceorientation', handleOrientation, true);
-                        }
-                    } catch (e) {
-                        clearTimeout(timeoutId);
-                        console.warn('Orientation permission timeout or error, applying fallback:', e);
-                        // Fallback: всё равно вешаем слушатель на случай, если событие доступно без явного разрешения
+            if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+                try {
+                    const state = await DeviceOrientationEvent.requestPermission();
+                    if (state !== 'granted') {
+                        alert('Доступ к компасу запрещён. Приложение не сможет работать.');
+                        permissionGranted = false;
+                        startBtn.textContent = 'Включить компас';
+                        startBtn.style.pointerEvents = 'auto';
+                    } else {
                         window.addEventListener('deviceorientation', handleOrientation, true);
                     }
-                } else {
+                } catch (e) {
+                    console.error('Orientation permission error:', e);
                     window.addEventListener('deviceorientation', handleOrientation, true);
                 }
+            } else {
+                window.addEventListener('deviceorientation', handleOrientation, true);
             }
 
-            await requestOrientationWithTimeout();
-
-            // Если из-за отказа в правах сбросился флаг
-            if (!permissionGranted) {
-                startBtn.textContent = 'Включить компас';
-                startBtn.style.pointerEvents = 'auto';
-                return;
-            }
-
-            // Геолокация с надежным фолбэком
-            if (navigator.geolocation) {
+            if (navigator.geolocation && permissionGranted) {
                 navigator.geolocation.getCurrentPosition(
                     pos => {
                         userLat = pos.coords.latitude;
@@ -577,11 +557,12 @@
                         updateCurrentSunPosition();
                         startOverlay.classList.add('hidden');
                     },
-                    { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 }
+                    { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
                 );
+            } else if (!permissionGranted) {
+                // Кнопка сброшена выше
             } else {
-                userLat = 55.7558; 
-                userLon = 37.6173;
+                userLat = 55.7558; userLon = 37.6173;
                 locationLabel.textContent = 'Москва (Демо)';
                 updateCurrentSunPosition();
                 startOverlay.classList.add('hidden');
