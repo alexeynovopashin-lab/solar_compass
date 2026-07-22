@@ -32,7 +32,7 @@
             flex-direction: column;
             justify-content: space-between;
             align-items: center;
-            padding: calc(env(safe-area-inset-top) + 20px) 24px calc(env(safe-area-inset-bottom) + 24px);
+            padding: calc(env(safe-area-inset-top) + 20px) 24px calc(env(safe-area-inset-bottom) + 32px);
             user-select: none;
             -webkit-user-select: none;
             -webkit-tap-highlight-color: transparent;
@@ -197,7 +197,7 @@
             opacity: 0.5;
         }
 
-        /* --- НИЖНИЙ БЛОК: КНОПКА СПУСКА КАМЕРЫ --- */
+        /* --- НИЖНИЙ БЛОК --- */
         .footer-meta {
             position: relative;
             z-index: 1;
@@ -239,7 +239,6 @@
                         box-shadow 0.25s ease;
         }
 
-        /* Зафиксированное состояние (Индикатор захвата кадра) */
         .shutter-btn.active {
             border-color: var(--accent-sun);
         }
@@ -257,6 +256,19 @@
             color: var(--text-secondary);
             letter-spacing: 0.2px;
         }
+
+        /* --- НОМЕР СБОРКИ --- */
+        .build-number {
+            position: absolute;
+            bottom: 12px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 10px;
+            color: rgba(255, 255, 255, 0.15);
+            font-weight: 500;
+            letter-spacing: 0.5px;
+            pointer-events: none;
+        }
     </style>
 </head>
 <body>
@@ -266,13 +278,13 @@
         <button class="start-btn" id="startBtn">Включить компас</button>
     </div>
 
-    <!-- Заголовок и вычисленное время -->
+    <!-- Заголовок -->
     <div class="display-header">
         <div class="date-label" id="dateLabel">Наведитесь</div>
         <div class="time-value" id="timeValue"></div>
     </div>
 
-    <!-- Визуальный компас -->
+    <!-- Компас -->
     <div class="compass-viewport" id="compassViewport">
         <div class="target-line" id="targetLine"></div>
         <div class="sun-marker" id="sunMarker"></div>
@@ -289,7 +301,7 @@
         </svg>
     </div>
 
-    <!-- Кнопка спуска Фотокамеры -->
+    <!-- Кнопка спуска -->
     <div class="footer-meta">
         <button class="shutter-btn" id="calcBtn" aria-label="Сделать замер">
             <div class="shutter-inner"></div>
@@ -297,8 +309,10 @@
         <div class="location-name" id="locationLabel">Определение...</div>
     </div>
 
+    <div class="build-number">Build 1.0.3</div>
+
     <script>
-        // Рендер рисок компаса
+        // 1. Рендер рисок компаса
         const ticksGroup = document.getElementById('ticksGroup');
         for (let i = 0; i < 360; i += 5) {
             const isMajor = i % 30 === 0;
@@ -316,7 +330,6 @@
             ticksGroup.appendChild(line);
         }
 
-        // Элементы UI
         const dateLabel = document.getElementById('dateLabel');
         const timeValue = document.getElementById('timeValue');
         const locationLabel = document.getElementById('locationLabel');
@@ -328,16 +341,14 @@
         const startOverlay = document.getElementById('startOverlay');
         const startBtn = document.getElementById('startBtn');
 
-        // Переменные состояния
         let userLat = null;
         let userLon = null;
         let currentHeading = 0;
         let lastRawHeading = 0;
         let unwrappedHeading = 0;
-        let lastCalculatedHeading = null;
         let isLocked = false;
 
-        // Инициализация датчиков
+        // 2. Инициализация (iOS PWA)
         startBtn.addEventListener('click', async () => {
             startBtn.textContent = 'Подключение...';
             startBtn.style.pointerEvents = 'none';
@@ -377,10 +388,16 @@
             }
         });
 
-        // Астрономия (NOAA Solar Algorithm)
+        // 3. Астрономия и Математика
         const toRad = d => d * Math.PI / 180;
         const toDeg = r => r * 180 / Math.PI;
+        
         function getJulianDate(date) { return (date.getTime() / 1000 / 86400.0) + 2440587.5; }
+        
+        function angDiff(a, b) {
+            let d = Math.abs(a - b);
+            return Math.min(d, 360 - d);
+        }
 
         function getSolarPosition(jd, lat, lon) {
             const d = jd - 2451545.0;
@@ -407,19 +424,42 @@
             return { azimuth: (azimuth + 360) % 360, altitude };
         }
 
+        // Новый точный алгоритм поиска: шаг полчаса -> минутное сканирование (Исключает баг с 00:00)
         function findSolarPassage(targetAzimuth, lat, lon) {
             const now = new Date();
-            const startJd = getJulianDate(now);
+            // Начинаем ровно с начала текущего дня (чтобы не пропустить утреннее солнце, если ищем днем)
+            const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            const startJd = getJulianDate(todayStart);
 
             for (let day = 0; day < 365; day++) {
                 const dayJd = startJd + day;
-                for (let h = 0; h < 24; h += 1) {
+                
+                // Проходим каждые 30 минут
+                for (let h = 0; h < 24; h += 0.5) {
                     const jd = dayJd + (h / 24);
                     const pos = getSolarPosition(jd, lat, lon);
+                    
+                    // Ищем только солнце над горизонтом
                     if (pos.altitude > 0) {
-                        let dAz = Math.abs(pos.azimuth - targetAzimuth);
-                        if (Math.min(dAz, 360 - dAz) < 7.5) {
-                            return refinePassage(jd - (1/24), jd + (1/24), targetAzimuth, lat, lon);
+                        // Если мы в радиусе 6 градусов от цели — замедляемся и ищем поминутно
+                        if (angDiff(pos.azimuth, targetAzimuth) < 6) {
+                            
+                            let bestJd = jd;
+                            let minDiff = Infinity;
+                            
+                            // Сканируем ± 45 минут вокруг найденной точки с шагом в 1 минуту
+                            for (let m = -45; m <= 45; m++) {
+                                let minuteJd = jd + (m / 1440);
+                                let mPos = getSolarPosition(minuteJd, lat, lon);
+                                let diff = angDiff(mPos.azimuth, targetAzimuth);
+                                
+                                if (diff < minDiff) {
+                                    minDiff = diff;
+                                    bestJd = minuteJd;
+                                }
+                            }
+                            // Возвращаем точное время
+                            return new Date((bestJd - 2440587.5) * 86400 * 1000);
                         }
                     }
                 }
@@ -427,33 +467,26 @@
             return null;
         }
 
-        function refinePassage(lo, hi, targetAzimuth, lat, lon) {
-            for (let i = 0; i < 12; i++) {
-                const mid = (lo + hi) / 2;
-                const pMid = getSolarPosition(mid, lat, lon);
-                let dMid = Math.abs(pMid.azimuth - targetAzimuth);
-                if (dMid > 180) dMid = 360 - dMid;
-
-                const pLo = getSolarPosition(lo, lat, lon);
-                let dLo = Math.abs(pLo.azimuth - targetAzimuth);
-                if (dLo > 180) dLo = 360 - dLo;
-
-                dLo < dMid ? (hi = mid) : (lo = mid);
-            }
-            return new Date(((lo + hi) / 2 - 2440587.5) * 86400 * 1000);
-        }
-
+        // Безопасное форматирование без мутаций
         function formatResult(date) {
             if (!date) return { dateStr: 'Вне орбиты', timeStr: '—' };
-            const diffDays = Math.floor((date.setHours(0,0,0,0) - new Date().setHours(0,0,0,0)) / 86400000);
+
             const timeStr = date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+
+            const dTarget = new Date(date);
+            dTarget.setHours(0, 0, 0, 0);
+
+            const dNow = new Date();
+            dNow.setHours(0, 0, 0, 0);
+
+            const diffDays = Math.round((dTarget - dNow) / 86400000);
 
             if (diffDays === 0) return { dateStr: 'Сегодня', timeStr };
             if (diffDays === 1) return { dateStr: 'Завтра', timeStr };
             return { dateStr: date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' }), timeStr };
         }
 
-        // Ориентация
+        // 4. Логика компаса
         function handleOrientation(e) {
             let heading = e.webkitCompassHeading || (e.alpha !== null ? 360 - e.alpha : null);
             if (heading !== null) {
@@ -462,6 +495,8 @@
         }
 
         function onHeadingChange(heading) {
+            if (isLocked) return;
+
             let diff = heading - lastRawHeading;
             if (diff < -180) diff += 360;
             if (diff > 180) diff -= 360;
@@ -471,15 +506,6 @@
 
             compassSvg.style.transform = `rotate(${-unwrappedHeading}deg)`;
             sunMarker.style.transform = `translateX(-50%) rotate(${unwrappedHeading}deg)`;
-
-            // Автосброс при повороте телефона более чем на 2.5 градуса
-            if (isLocked && lastCalculatedHeading !== null) {
-                let delta = Math.abs(currentHeading - lastCalculatedHeading);
-                delta = Math.min(delta, 360 - delta);
-                if (delta > 2.5) {
-                    resetLock();
-                }
-            }
         }
 
         function resetLock() {
@@ -495,9 +521,7 @@
 
         function executeCalculation() {
             if (userLat === null) return;
-
             isLocked = true;
-            lastCalculatedHeading = currentHeading;
 
             dateLabel.textContent = '';
             timeValue.textContent = '···';
@@ -516,19 +540,16 @@
                 targetLine.classList.add('active');
 
                 calcBtn.classList.add('active');
-            }, 120);
+            }, 100);
         }
 
-        // События клика
-        calcBtn.addEventListener('click', () => {
+        function toggleLock() {
             if (isLocked) resetLock();
             else executeCalculation();
-        });
+        }
 
-        compassViewport.addEventListener('click', () => {
-            if (isLocked) resetLock();
-            else executeCalculation();
-        });
+        calcBtn.addEventListener('click', toggleLock);
+        compassViewport.addEventListener('click', toggleLock);
 
         function reverseGeocode(lat, lon) {
             locationLabel.textContent = `${lat.toFixed(2)}°, ${lon.toFixed(2)}°`;
