@@ -163,10 +163,10 @@
             color: var(--text-primary);
             width: 100%;
             max-width: 340px;
-            overflow: hidden; /* важно для масок */
+            overflow: hidden;
         }
 
-        /* Верхний градиент – цифры "уходят под стекло" */
+        /* Градиентные маски поверх барабанов */
         .clock::before {
             content: "";
             position: absolute;
@@ -174,40 +174,21 @@
             left: 0;
             right: 0;
             height: 25%;
-            z-index: 10;
+            background: linear-gradient(to bottom, var(--bg) 0%, transparent 100%);
+            z-index: 5;
             pointer-events: none;
-            background: linear-gradient(to bottom, var(--bg) 0%, rgba(5,5,5,0.85) 45%, transparent 100%);
         }
 
-        /* Нижний градиент */
         .clock::after {
             content: "";
             position: absolute;
             bottom: 0;
             left: 0;
             right: 0;
-            height: 20%;
-            z-index: 10;
-            pointer-events: none;
+            height: 25%;
             background: linear-gradient(to top, var(--bg) 0%, transparent 100%);
-        }
-
-        .clock.loading .digit,
-        .clock.loading .separator { opacity: 0; }
-
-        .clock.loading::after,
-        .clock.loading::before { display: none; }
-
-        .clock.loading::after {
-            content: "···";
-            position: absolute;
-            inset: 0;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            font-size: 40px;
-            letter-spacing: 8px;
-            color: var(--text-secondary);
+            z-index: 5;
+            pointer-events: none;
         }
 
         .digit {
@@ -215,9 +196,6 @@
             width: 0.62em;
             height: 1em;
             overflow: hidden;
-            /* Маска для эффекта стеклянной шахты */
-            -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 20%, black 80%, transparent 100%);
-            mask-image: linear-gradient(to bottom, transparent 0%, black 20%, black 80%, transparent 100%);
         }
 
         .wheel {
@@ -446,7 +424,6 @@
             }
         })();
 
-        // Динамический номер сборки
         (function setBuildNumber() {
             const now = new Date();
             const pad = n => String(n).padStart(2, '0');
@@ -524,7 +501,7 @@
         // ==================== Машина состояний ====================
         const STATE = { IDLE: 'idle', PERMISSION: 'permission', READY: 'ready', CALCULATING: 'calculating', LOCKED: 'locked' };
         let appState = STATE.IDLE;
-        let chaosTimer = null;
+        let chaosTimers = [];
 
         function setAppState(newState) {
             appState = newState;
@@ -582,15 +559,15 @@
 
         // ==================== ОДОМЕТР – механический ролик ====================
         const wheels = [...document.querySelectorAll(".wheel")];
-        const TOTAL_SECTIONS = 100; // Больше секций, меньше заметных сбросов
+        const TOTAL_SECTIONS = 100;
         let previousDigits = [0, 0, 0, 0];
         let rotations = [0, 0, 0, 0];
         let isClockInitialized = false;
 
-        // Каскадные задержки (мс)
         const cascadeDelay = [0, 80, 160, 240];
 
         wheels.forEach((w) => {
+            w.innerHTML = '';
             for (let i = 0; i < TOTAL_SECTIONS * 10; i++) {
                 const d = document.createElement("div");
                 d.textContent = i % 10;
@@ -598,57 +575,74 @@
             }
         });
 
-        // Основная функция: прокрутить колёса к новому времени
         function setClockTime(timeStr, forceImmediate = false) {
             const digits = timeStr.replace(":", "").split("").map(Number);
             if (digits.length !== 4) return;
 
-            digits.forEach((target, index) => {
-                const wheel = wheels[index];
-                const current = previousDigits[index];
-
-                if (!isClockInitialized || forceImmediate) {
-                    // Инициализация или сброс: ставим среднюю позицию
+            if (!isClockInitialized || forceImmediate) {
+                digits.forEach((target, index) => {
+                    const wheel = wheels[index];
                     rotations[index] = (TOTAL_SECTIONS / 2) * 10 + target;
                     wheel.style.transition = 'none';
                     wheel.style.transform = `translateY(${-rotations[index]}em)`;
                     previousDigits[index] = target;
-                    requestAnimationFrame(() => { wheel.style.transition = ''; });
-                    return;
-                }
+                });
+                isClockInitialized = true;
+                setTimeout(() => {
+                    wheels.forEach(w => w.style.transition = '');
+                }, 50);
+                return;
+            }
 
-                if (target === current) return;
+            let oldMins = previousDigits[0]*600 + previousDigits[1]*60 + previousDigits[2]*10 + previousDigits[3];
+            let newMins = digits[0]*600 + digits[1]*60 + digits[2]*10 + digits[3];
+            
+            let diffMins = newMins - oldMins;
+            if (diffMins === 0) return; 
+            if (diffMins < 0) diffMins += 24 * 60; // Плавное вращение вперед
 
-                let diff = target - current;
-                if (diff < 0) diff += 10; // всегда крутим вперёд (вверх)
+            const stepD3 = diffMins;
+            const stepD2 = Math.floor((oldMins + diffMins) / 10) - Math.floor(oldMins / 10);
+            const stepD1 = Math.floor((oldMins + diffMins) / 60) - Math.floor(oldMins / 60);
+            const stepD0 = Math.floor((oldMins + diffMins) / 600) - Math.floor(oldMins / 600);
 
-                const steps = diff;
-                rotations[index] += steps;
+            const steps = [stepD0, stepD1, stepD2, stepD3];
+            let maxSteps = Math.max(...steps);
 
-                // Длительность зависит от количества шагов
-                const duration = 0.45 + steps * 0.12;
-                wheel.style.transition = `transform ${duration}s cubic-bezier(0.25, 0.8, 0.25, 1)`;
+            let actualDur = 0.65;
+            if (maxSteps > 10) actualDur = 1.0;
+            if (maxSteps > 50) actualDur = 1.6;
+            if (maxSteps > 100) actualDur = 2.2;
+
+            digits.forEach((target, index) => {
+                const wheel = wheels[index];
+                let s = steps[index];
+                
+                const expectedDigit = (previousDigits[index] + s) % 10;
+                let correction = target - expectedDigit;
+                if (correction < 0) correction += 10;
+                s += correction;
+
+                rotations[index] += s;
+
+                wheel.style.transition = `transform ${actualDur}s cubic-bezier(0.25, 0.8, 0.25, 1)`;
                 wheel.style.transitionDelay = `${cascadeDelay[index]}ms`;
                 wheel.style.transform = `translateY(${-rotations[index]}em)`;
 
                 previousDigits[index] = target;
 
-                // Сброс ленты в середину, если она ушла слишком далеко от центра
-                const mid = (TOTAL_SECTIONS / 2) * 10;
-                const threshold = 5 * 10;
-                if (Math.abs(rotations[index] - mid) > (TOTAL_SECTIONS/2 - 5) * 10) {
-                    const resetDuration = duration * 1000 + cascadeDelay[index] + 50;
+                const currentRotation = rotations[index];
+                const threshold = (TOTAL_SECTIONS - 15) * 10;
+                if (currentRotation > threshold) {
                     setTimeout(() => {
                         const newMid = (TOTAL_SECTIONS / 2) * 10 + target;
                         rotations[index] = newMid;
                         wheel.style.transition = 'none';
                         wheel.style.transform = `translateY(${-newMid}em)`;
-                        requestAnimationFrame(() => { wheel.style.transition = ''; });
-                    }, resetDuration);
+                        void wheel.offsetWidth;
+                    }, (actualDur * 1000) + cascadeDelay[index] + 100);
                 }
             });
-
-            isClockInitialized = true;
         }
 
         function syncClockToNextMinute() {
@@ -662,28 +656,35 @@
             clockTimeoutId = setTimeout(syncClockToNextMinute, msToNextMinute);
         }
 
-        // Хаотичное вращение (слот-машина)
+        // Режим вращения барабанов (слот-машина) во время вычисления
         function startChaosClock() {
             stopChaosClock();
-            // Очищаем предыдущие таймеры на колёсах
-            wheels.forEach(w => {
-                w.style.transition = 'none';
-                w.style.transform = '';
+            wheels.forEach((wheel, index) => {
+                const speed = 60 + Math.random() * 80;
+                wheel.style.transition = `transform ${speed}ms linear`;
+                
+                const t = setInterval(() => {
+                    rotations[index] += Math.floor(Math.random() * 3) + 1;
+                    wheel.style.transform = `translateY(${-rotations[index]}em)`;
+                    
+                    if (rotations[index] > (TOTAL_SECTIONS - 10) * 10) {
+                        rotations[index] = (TOTAL_SECTIONS / 2) * 10 + (rotations[index] % 10);
+                        wheel.style.transition = 'none';
+                        wheel.style.transform = `translateY(${-rotations[index]}em)`;
+                        void wheel.offsetWidth;
+                        wheel.style.transition = `transform ${speed}ms linear`;
+                    }
+                }, speed);
+                chaosTimers.push(t);
             });
-            // Запускаем бесконечную случайную смену
-            chaosTimer = setInterval(() => {
-                if (appState !== STATE.LOCKED) return;
-                const h = Math.floor(Math.random() * 24).toString().padStart(2, '0');
-                const m = Math.floor(Math.random() * 60).toString().padStart(2, '0');
-                setClockTime(h + m);
-            }, 120);
         }
 
         function stopChaosClock() {
-            if (chaosTimer) {
-                clearInterval(chaosTimer);
-                chaosTimer = null;
-            }
+            chaosTimers.forEach(t => clearInterval(t));
+            chaosTimers = [];
+            wheels.forEach((wheel, index) => {
+                previousDigits[index] = Math.floor(rotations[index]) % 10;
+            });
         }
 
         // ==================== Астрономия ====================
@@ -823,12 +824,13 @@
             shootLine.setAttribute('opacity', '0');
             calcBtn.classList.remove('active');
             dateLabel.textContent = '';
-            clockEl.classList.remove('loading');
             clearTimeout(clockTimeoutId);
-            // Сброс одометра на текущее время (инициализация)
+            
+            // Плавный заезд одометра в актуальное текущее время
             const now = new Date();
             const timeStr = now.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
-            setClockTime(timeStr, true);
+            setClockTime(timeStr, false); 
+
             syncClockToNextMinute();
             updateCurrentSunPosition();
             if (animationFrameId) { cancelAnimationFrame(animationFrameId); animationFrameId = null; }
@@ -872,15 +874,14 @@
             setAppState(STATE.CALCULATING);
             targetAzimuth = normalizeAngle(realHeading);
             dateLabel.textContent = '';
-            clockEl.classList.add('loading');
+            
+            // Сразу включаем вращение барабанов
+            startChaosClock();
 
             setTimeout(() => {
                 const passageDate = findSolarPassage(targetAzimuth, userLat, userLon);
                 if (!passageDate) {
-                    // Солнце не найдено – хаотичное вращение
                     dateLabel.textContent = 'Не освещается';
-                    clockEl.classList.remove('loading');
-                    startChaosClock();
                     setAppState(STATE.LOCKED);
                     compassViewport.classList.add('locked');
                     calcBtn.classList.add('active');
@@ -928,11 +929,11 @@
                             setTimeout(() => targetSunDot.setAttribute('r', '7'), 150);
 
                             shootLine.setAttribute('opacity', '0');
-                            clockEl.classList.remove('loading');
                             dateLabel.textContent = dateStr + special;
                             
-                            // Плавный докрут одометра до найденного времени (без forceImmediate!)
-                            setClockTime(timeStr);
+                            // В момент касания точки останавливаем хаос и докручиваем до итогового времени
+                            stopChaosClock();
+                            setClockTime(timeStr, false);
                             
                             compassViewport.classList.add('locked');
                             calcBtn.classList.add('active');
