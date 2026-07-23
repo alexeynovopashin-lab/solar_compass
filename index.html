@@ -65,10 +65,6 @@
             --accent-glow: rgba(255, 210, 95, 0.4);
             --surface: rgba(255, 255, 255, 0.08);
             --surface-border: rgba(255, 255, 255, 0.15);
-            --circle-outer: rgba(255, 255, 255, 0.08);
-            --circle-dashed: rgba(255, 255, 255, 0.1);
-            --tick-color: rgba(255, 255, 255, 0.1);
-            --tick-major-color: rgba(255, 255, 255, 0.3);
         }
 
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -144,29 +140,79 @@
         }
 
         .date-label {
-            font-size: 18px;
+            font-size: 17px;
             font-weight: 500;
             color: var(--text-secondary);
             letter-spacing: -0.2px;
             min-height: 24px;
         }
 
-        .time-value {
+        .clock {
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 2px;
             font-size: 72px;
-            font-weight: 100;
-            letter-spacing: -3px;
-            line-height: 1;
-            color: var(--text-primary);
-            font-variant-numeric: tabular-nums;
-            margin-top: 4px;
-            min-height: 72px;
-            transition: transform 0.15s cubic-bezier(0.4, 0.0, 0.2, 1), opacity 0.15s ease;
-        }
-        .time-value.dots {
-            font-size: 40px;
             font-weight: 200;
-            letter-spacing: 6px;
+            font-variant-numeric: tabular-nums;
+            font-feature-settings: "tnum";
+            letter-spacing: -1px;
+            height: 72px;
+            margin-top: 4px;
+            color: var(--text-primary);
+        }
+
+        .clock.loading .digit,
+        .clock.loading .separator { opacity: 0; }
+
+        .clock.loading::after {
+            content: "···";
+            position: absolute;
+            inset: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 40px;
+            letter-spacing: 8px;
             color: var(--text-secondary);
+        }
+
+        .digit {
+            position: relative;
+            width: 0.62em;
+            height: 1em;
+            overflow: hidden;
+        }
+
+        .wheel {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            transition: transform 0.4s cubic-bezier(0.2, 0.9, 0.2, 1);
+            will-change: transform;
+        }
+
+        .digit:nth-child(1) .wheel { transition-delay: 60ms; }
+        .digit:nth-child(2) .wheel { transition-delay: 40ms; }
+        .digit:nth-child(4) .wheel { transition-delay: 20ms; }
+        .digit:nth-child(5) .wheel { transition-delay: 0ms; }
+
+        .wheel div {
+            height: 1em;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .separator {
+            width: 0.25em;
+            text-align: center;
+            color: var(--text-primary);
+            font-weight: 200;
+            line-height: 1;
+            transform: translateY(-2px);
         }
 
         .compass-viewport {
@@ -305,7 +351,6 @@
 </head>
 <body>
 
-    <!-- Онбординг -->
     <div class="onboarding-overlay" id="onboardingOverlay">
         <div class="onboarding-card">
             <p>Направьте телефон в интересующую сторону</p>
@@ -314,14 +359,19 @@
         </div>
     </div>
 
-    <!-- Стартовый оверлей -->
     <div class="start-overlay" id="startOverlay">
         <button class="start-btn" id="startBtn">Включить компас</button>
     </div>
 
     <div class="display-header">
         <div class="date-label" id="dateLabel"></div>
-        <div class="time-value" id="timeValue"></div>
+        <div class="clock" id="clock">
+            <div class="digit"><div class="wheel"></div></div>
+            <div class="digit"><div class="wheel"></div></div>
+            <div class="separator">:</div>
+            <div class="digit"><div class="wheel"></div></div>
+            <div class="digit"><div class="wheel"></div></div>
+        </div>
     </div>
 
     <div class="compass-viewport" id="compassViewport">
@@ -335,6 +385,9 @@
             <g id="ticksGroup"></g>
             <g id="lettersGroup"></g>
 
+            <!-- Линия-трассер для визуализации расчета -->
+            <line id="shootLine" x1="170" y1="170" x2="170" y2="170" stroke="#ffd25f" stroke-width="1.5" stroke-dasharray="2 4" opacity="0"/>
+            
             <circle id="currentSunDot" cx="170" cy="50" r="5" fill="#ffffff" filter="drop-shadow(0 0 6px rgba(255,255,255,0.9))" style="display: none;" />
             <circle id="targetSunDot" cx="170" cy="10" r="7" fill="#ffd25f" filter="drop-shadow(0 0 10px #ffd25f)" style="display: none;" />
         </svg>
@@ -347,22 +400,20 @@
         <div class="location-name" id="locationLabel">Определение...</div>
     </div>
 
-    <div class="build-number">Build 1.3.3</div>
+    <div class="build-number">Build 1.5.0</div>
 
     <script>
         console.log('Script loaded successfully');
-        console.log('SunCalc defined:', !!window.SunCalc);
 
         // ==================== РЕНДЕР КОМПАСА ====================
         const ticksGroup = document.getElementById('ticksGroup');
         const lettersGroup = document.getElementById('lettersGroup');
         const cx = 170, cy = 170;
         const r1 = 160;
-        const r2_major = r1 - 12; // 148
-        const r2_minor = r1 - 6;  // 154
+        const r2_major = r1 - 12;
+        const r2_minor = r1 - 6;
 
         for (let i = 0; i < 360; i += 5) {
-            // Делаем аккуратные разрывы (пропускаем саму букву и соседние +-5 градусов)
             const mod = i % 90;
             if (mod <= 5 || mod >= 85) continue;
 
@@ -380,7 +431,6 @@
             ticksGroup.appendChild(line);
         }
 
-        // Буквы сторон света — ставим ровно на радиус рисок
         const LETTER_OFFSET = 154; 
         const directions = [
             { label: 'N', angle: 0, fill: '#ffd25f', weight: '600' },
@@ -401,18 +451,19 @@
             text.setAttribute('font-size', '14');
             text.setAttribute('font-weight', dir.weight);
             text.setAttribute('text-anchor', 'middle');
-            text.setAttribute('dominant-baseline', 'central'); // Идеальное выравнивание по центру
+            text.setAttribute('dominant-baseline', 'central');
             text.textContent = dir.label;
             lettersGroup.appendChild(text);
         });
 
         const dateLabel = document.getElementById('dateLabel');
-        const timeValue = document.getElementById('timeValue');
+        const clockEl = document.getElementById('clock');
         const locationLabel = document.getElementById('locationLabel');
         const compassSvg = document.getElementById('compassSvg');
         const compassViewport = document.getElementById('compassViewport');
         const currentSunDot = document.getElementById('currentSunDot');
         const targetSunDot = document.getElementById('targetSunDot');
+        const shootLine = document.getElementById('shootLine');
         const calcBtn = document.getElementById('calcBtn');
         const startOverlay = document.getElementById('startOverlay');
         const startBtn = document.getElementById('startBtn');
@@ -430,22 +481,83 @@
         let currentSunAzimuth = 0;
         let targetAzimuth = null;
         let animationFrameId = null;
+        let clockTimeoutId = null;
+
+        // ==================== ОДОМЕТР СИНХРОНИЗИРОВАННЫЙ ====================
+        const wheels = [...document.querySelectorAll(".wheel")];
+        const TOTAL_SECTIONS = 30;
+        let previousDigits = [0, 0, 0, 0];
+        let rotations = [0, 0, 0, 0];
+        let isClockInitialized = false;
+
+        wheels.forEach((w) => {
+            for (let i = 0; i < TOTAL_SECTIONS * 10; i++) {
+                const d = document.createElement("div");
+                d.textContent = i % 10;
+                w.appendChild(d);
+            }
+        });
+
+        function setClockTime(timeStr, forceImmediate = false) {
+            const digits = timeStr.replace(":", "").split("").map(Number);
+
+            digits.forEach((targetValue, index) => {
+                const wheel = wheels[index];
+                let currentVal = previousDigits[index];
+
+                if (!isClockInitialized || forceImmediate) {
+                    rotations[index] = (TOTAL_SECTIONS / 2) * 10 + targetValue;
+                    wheel.style.transition = 'none';
+                    wheel.style.transform = `translateY(${-rotations[index]}em)`;
+                    previousDigits[index] = targetValue;
+                    
+                    requestAnimationFrame(() => {
+                        wheel.style.transition = '';
+                    });
+                    return;
+                }
+
+                if (targetValue !== currentVal) {
+                    let diff = targetValue - currentVal;
+                    if (diff < 0) diff += 10;
+
+                    rotations[index] += diff;
+                    wheel.style.transform = `translateY(${-rotations[index]}em)`;
+                    previousDigits[index] = targetValue;
+
+                    setTimeout(() => {
+                        if (rotations[index] > (TOTAL_SECTIONS - 5) * 10 || rotations[index] < 5 * 10) {
+                            rotations[index] = (TOTAL_SECTIONS / 2) * 10 + targetValue;
+                            wheel.style.transition = "none";
+                            wheel.style.transform = `translateY(${-rotations[index]}em)`;
+                            requestAnimationFrame(() => { wheel.style.transition = ""; });
+                        }
+                    }, 450);
+                }
+            });
+
+            isClockInitialized = true;
+        }
+
+        // Обновление ровно по границе минуты
+        function syncClockToNextMinute() {
+            if (!isLocked) {
+                const now = new Date();
+                const timeStr = now.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+                setClockTime(timeStr);
+            }
+            const nowMs = new Date();
+            const msToNextMinute = 60000 - (nowMs.getSeconds() * 1000 + nowMs.getMilliseconds());
+            clockTimeoutId = setTimeout(syncClockToNextMinute, msToNextMinute);
+        }
+        syncClockToNextMinute();
 
         // ==================== SUNCalc ====================
         function getSolarPosition(date, lat, lon) {
-            if (!lat || !lon || isNaN(lat) || isNaN(lon) || !window.SunCalc) 
-                return { azimuth: 0, altitude: -90 };
-            try {
-                const pos = window.SunCalc.getPosition(date, lat, lon);
-                let azimuth = pos.azimuth * (180 / Math.PI);
-                azimuth = (azimuth + 180) % 360;
-                azimuth = (azimuth + 360) % 360;
-                const altitude = pos.altitude * (180 / Math.PI);
-                return { azimuth, altitude };
-            } catch (e) {
-                console.error('SunCalc error:', e);
-                return { azimuth: 0, altitude: -90 };
-            }
+            if (!lat || !lon || !window.SunCalc) return { azimuth: 0, altitude: -90 };
+            const pos = window.SunCalc.getPosition(date, lat, lon);
+            let azimuth = (pos.azimuth * 180 / Math.PI + 360) % 360;
+            return { azimuth, altitude: pos.altitude * 180 / Math.PI };
         }
 
         const angDiff = (a, b) => { let d = Math.abs(a - b) % 360; return Math.min(d, 360 - d); };
@@ -470,45 +582,63 @@
             setSvgDotPosition(currentSunDot, currentSunAzimuth, 115);
         }
 
+        // Улучшенный алгоритм: Сканирование интервалами
         function findSolarPassage(targetAzimuth, lat, lon) {
             const now = new Date();
-            let checkDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-            for (let day = 0; day < 40; day++) {
-                for (let min = 0; min < 1440; min += 3) {
-                    const testDate = new Date(checkDate.getTime() + min * 60000);
-                    if (testDate < now) continue;
-                    const pos = getSolarPosition(testDate, lat, lon);
-                    if (angDiff(pos.azimuth, targetAzimuth) < 5) {
-                        let bestDate = testDate, minDiff = Infinity;
-                        for (let f = -20; f <= 20; f += 1) {
-                            const fineDate = new Date(testDate.getTime() + f * 60000);
-                            const fPos = getSolarPosition(fineDate, lat, lon);
-                            const diff = angDiff(fPos.azimuth, targetAzimuth);
-                            if (diff < minDiff) { minDiff = diff; bestDate = fineDate; }
+            let checkTime = now.getTime();
+            
+            // 1. Грубый поиск с шагом 1 час (максимум 40 суток)
+            for (let i = 0; i < 40 * 24; i++) {
+                let t = new Date(checkTime + i * 3600000);
+                let pos = getSolarPosition(t, lat, lon);
+                
+                // Если мы в радиусе 15 градусов от цели — замедляемся для точного поиска
+                if (angDiff(pos.azimuth, targetAzimuth) < 15) {
+                    let bestTime = t.getTime();
+                    let minDiff = Infinity;
+                    
+                    // 2. Точный поиск внутри этого 2-часового окна (±1 час) с шагом 1 минута
+                    for (let m = -60; m <= 60; m++) {
+                        let fineT = new Date(t.getTime() + m * 60000);
+                        if (fineT < now) continue;
+                        let finePos = getSolarPosition(fineT, lat, lon);
+                        let d = angDiff(finePos.azimuth, targetAzimuth);
+                        if (d < minDiff) {
+                            minDiff = d;
+                            bestTime = fineT.getTime();
                         }
-                        return bestDate;
+                    }
+                    if (minDiff <= 1) { // Идеальное попадание найдено
+                        return new Date(bestTime);
                     }
                 }
-                checkDate.setDate(checkDate.getDate() + 1);
             }
             return null;
         }
 
         function formatResult(date, lat, lon) {
-            if (!date) return { dateStr: 'Не найдено в ближайшие 40 дней', timeStr: '—', special: '' };
+            if (!date) return { dateStr: 'Не найдено', timeStr: '00:00', special: '' };
             const timeStr = date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
             const dTarget = new Date(date); dTarget.setHours(0,0,0,0);
             const dNow = new Date(); dNow.setHours(0,0,0,0);
             const diffDays = Math.round((dTarget - dNow) / 86400000);
-            let dateStr = '';
-            if (diffDays === 0) dateStr = 'Сегодня';
-            else if (diffDays === 1) dateStr = 'Завтра';
-            else dateStr = date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
+            
+            let dateStr = diffDays === 0 ? 'Сегодня' : diffDays === 1 ? 'Завтра' : date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
+            
             let special = '';
             if (lat && lon) {
+                const pos = getSolarPosition(date, lat, lon);
+                const alt = Math.round(pos.altitude);
                 const times = window.SunCalc.getTimes(date, lat, lon);
-                if (times.sunsetStart && times.goldenHourEnd && date >= times.sunsetStart && date <= times.goldenHourEnd) special = ' • Золотой час';
-                else if (times.sunset && times.dusk && date >= times.sunset && date <= times.dusk) special = ' • Синий час';
+                let phase = '';
+                
+                // Проверяем фазы для фотографов
+                if ((times.sunsetStart && date >= times.sunsetStart && date <= times.goldenHourEnd) || 
+                    (times.sunrise && date >= times.sunrise && date <= times.goldenHour)) phase = 'Золотой час';
+                else if ((times.sunset && date >= times.sunset && date <= times.dusk) || 
+                         (times.dawn && date >= times.dawn && date <= times.sunrise)) phase = 'Синий час';
+                
+                special = ` • ${phase ? phase + ' ' : ''}☀︎ ${alt}°`;
             }
             return { dateStr, timeStr, special };
         }
@@ -546,10 +676,17 @@
             needSyncAfterUnlock = true;
             compassViewport.classList.remove('locked');
             targetSunDot.style.display = 'none';
+            shootLine.setAttribute('opacity', '0');
             calcBtn.classList.remove('active');
             dateLabel.textContent = '';
-            updateClock();
-            timeValue.classList.remove('dots');
+            
+            clockEl.classList.remove('loading');
+            
+            // Форсированно обновляем время и перезапускаем таймер синхронизации
+            clearTimeout(clockTimeoutId);
+            setClockTime(new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }), true);
+            syncClockToNextMinute();
+            
             updateCurrentSunPosition();
             if (animationFrameId) { cancelAnimationFrame(animationFrameId); animationFrameId = null; }
         }
@@ -560,37 +697,49 @@
             isLocked = true;
             targetAzimuth = currentHeading;
             dateLabel.textContent = '';
-            timeValue.textContent = '···';
-            timeValue.classList.add('dots');
+            
+            clockEl.classList.add('loading');
 
+            // Асинхронно запускаем алгоритм
             setTimeout(() => {
                 const passageDate = findSolarPassage(targetAzimuth, userLat, userLon);
                 const { dateStr, timeStr, special } = formatResult(passageDate, userLat, userLon);
                 dateLabel.textContent = dateStr + special;
-                timeValue.classList.remove('dots');
-                timeValue.textContent = timeStr;
+                
+                clockEl.classList.remove('loading');
+                setClockTime(timeStr, true);
 
-                // Анимация выстреливания целевой точки из центра
                 targetSunDot.style.display = 'block';
-                setSvgDotPosition(targetSunDot, targetAzimuth, 0);
                 const startTime = performance.now();
-                const duration = 400;
+                const duration = 450;
 
+                // Визуализация расчета: Лазер + Точка
                 function animateTargetDot(now) {
                     const elapsed = now - startTime;
                     const progress = Math.min(elapsed / duration, 1);
-                    const easeOut = 1 - Math.pow(1 - progress, 3);
+                    const easeOut = 1 - Math.pow(1 - progress, 3); // "Apple" easeOut
                     const currentRadius = easeOut * 140;
+                    
                     setSvgDotPosition(targetSunDot, targetAzimuth, currentRadius);
+                    
+                    // Рисуем золотистый след, который растворяется в конце
+                    const rad = (targetAzimuth - 90) * Math.PI / 180;
+                    shootLine.setAttribute('x2', 170 + currentRadius * Math.cos(rad));
+                    shootLine.setAttribute('y2', 170 + currentRadius * Math.sin(rad));
+                    shootLine.setAttribute('opacity', progress < 0.6 ? progress * 1.5 : (1 - progress) * 2.5);
+
                     if (progress < 1) animationFrameId = requestAnimationFrame(animateTargetDot);
-                    else animationFrameId = null;
+                    else {
+                        animationFrameId = null;
+                        shootLine.setAttribute('opacity', '0');
+                    }
                 }
                 animationFrameId = requestAnimationFrame(animateTargetDot);
 
                 compassViewport.classList.add('locked');
                 calcBtn.classList.add('active');
                 isCalculating = false;
-            }, 100);
+            }, 50);
         }
 
         function toggleLock() {
@@ -598,28 +747,6 @@
             if (isLocked) resetLock();
             else executeCalculation();
         }
-
-        // ==================== Живые часы с перелистыванием ====================
-        function updateClock() {
-            if (!isLocked) {
-                const now = new Date();
-                const timeStr = now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }).replace(':', ' ');
-                if (timeValue.textContent !== timeStr) {
-                    // Анимация перелистывания: старые цифры уезжают вниз, новые падают сверху
-                    timeValue.style.transition = 'none';
-                    timeValue.style.transform = 'translateY(100%)';
-                    timeValue.style.opacity = '0';
-                    requestAnimationFrame(() => {
-                        timeValue.textContent = timeStr;
-                        timeValue.style.transition = 'transform 0.15s cubic-bezier(0.4, 0.0, 0.2, 1), opacity 0.15s ease';
-                        timeValue.style.transform = 'translateY(0)';
-                        timeValue.style.opacity = '1';
-                    });
-                }
-            }
-        }
-        setInterval(updateClock, 1000);
-        updateClock();
 
         // ==================== Онбординг ====================
         if (!localStorage.getItem('onboarding_done')) {
@@ -699,25 +826,29 @@
             }
         });
 
+        // Замена Nominatim на Photon API
         function reverseGeocode(lat, lon) {
-            const cacheKey = `city_${lat.toFixed(3)}_${lon.toFixed(3)}`;
+            const cacheKey = `city_photon_${lat.toFixed(3)}_${lon.toFixed(3)}`;
             const cachedCity = localStorage.getItem(cacheKey);
             if (cachedCity) { locationLabel.textContent = cachedCity; return; }
             locationLabel.textContent = `${lat.toFixed(2)}°, ${lon.toFixed(2)}°`;
-            fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&accept-language=ru`, {
-                headers: { 'User-Agent': 'SolarCompass/1.0 (https://github.com/alexeynovopashin-lab/solar_compass)' }
-            })
+            
+            fetch(`https://photon.komoot.io/reverse?lon=${lon}&lat=${lat}`)
             .then(r => r.json())
             .then(data => {
-                const city = data.address.city || data.address.town || data.address.settlement || data.address.country;
-                if (city) { locationLabel.textContent = city; localStorage.setItem(cacheKey, city); }
+                if (data.features && data.features.length > 0) {
+                    const props = data.features[0].properties;
+                    const city = props.city || props.town || props.village || props.county || props.state || props.country;
+                    if (city) { 
+                        locationLabel.textContent = city; 
+                        localStorage.setItem(cacheKey, city); 
+                    }
+                }
             }).catch(() => {});
         }
 
         calcBtn.addEventListener('click', toggleLock);
         compassViewport.addEventListener('click', toggleLock);
-
-        setInterval(updateCurrentSunPosition, 30000);
     </script>
 </body>
 </html>
