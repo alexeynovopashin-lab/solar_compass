@@ -194,12 +194,6 @@
             will-change: transform;
         }
 
-        /* Механический каскад: сначала единицы минут, потом десятки, потом часы */
-        .digit:nth-child(5) .wheel { transition-delay: 0ms; }
-        .digit:nth-child(4) .wheel { transition-delay: 80ms; }
-        .digit:nth-child(2) .wheel { transition-delay: 160ms; }
-        .digit:nth-child(1) .wheel { transition-delay: 240ms; }
-
         .wheel div {
             height: 1em;
             display: flex;
@@ -322,7 +316,6 @@
             pointer-events: none;
         }
 
-        /* Онбординг */
         .onboarding-overlay {
             position: fixed;
             inset: 0;
@@ -385,7 +378,6 @@
             <g id="ticksGroup"></g>
             <g id="lettersGroup"></g>
 
-            <!-- Линия-лазер для визуализации расчета -->
             <line id="shootLine" x1="170" y1="170" x2="170" y2="170" stroke="#ffd25f" stroke-width="1.5" stroke-dasharray="1 6" opacity="0"/>
             
             <circle id="currentSunDot" cx="170" cy="50" r="5" fill="#ffffff" filter="drop-shadow(0 0 6px rgba(255,255,255,0.9))" style="display: none;" />
@@ -404,7 +396,6 @@
     <div class="build-number">Build 2026.07.23</div>
 
     <script>
-        // ==================== РЕНДЕР КОМПАСА ====================
         const ticksGroup = document.getElementById('ticksGroup');
         const lettersGroup = document.getElementById('lettersGroup');
         const cx = 170, cy = 170;
@@ -484,20 +475,19 @@
         let clockTimeoutId = null;
         let sunUpdateIntervalId = null;
 
-        // Плавная интерполяция компаса (Lerp)
         function renderCompass() {
             if (!isLocked) {
                 let diff = targetDisplayHeading - currentDisplayHeading;
                 if (diff > 180) diff -= 360;
                 if (diff < -180) diff += 360;
-                currentDisplayHeading += diff * 0.15; // Smoothness factor
+                currentDisplayHeading += diff * 0.15;
                 compassSvg.style.transform = `rotate(${-currentDisplayHeading}deg)`;
             }
             requestAnimationFrame(renderCompass);
         }
         renderCompass();
 
-        // ==================== ОДОМЕТР ====================
+        // ==================== ОДОМЕТР С CARRY-OVER КАСКАДОМ ====================
         const wheels = [...document.querySelectorAll(".wheel")];
         const TOTAL_SECTIONS = 30;
         let previousDigits = [0, 0, 0, 0];
@@ -511,6 +501,13 @@
                 w.appendChild(d);
             }
         });
+
+        function getCarryDelay(index) {
+            for (let i = index + 1; i < previousDigits.length; i++) {
+                if (previousDigits[i] !== 9) return 0;
+            }
+            return (previousDigits.length - 1 - index) * 60;
+        }
 
         function setClockTime(timeStr, forceImmediate = false) {
             const digits = timeStr.replace(":", "").split("").map(Number);
@@ -534,6 +531,10 @@
                     if (diff < 0) diff += 10;
 
                     rotations[index] += diff;
+                    
+                    const dynamicDelay = getCarryDelay(index);
+                    wheel.style.transitionDelay = `${dynamicDelay}ms`;
+
                     wheel.style.transform = `translateY(${-rotations[index]}em)`;
                     previousDigits[index] = targetValue;
 
@@ -544,13 +545,12 @@
                             wheel.style.transform = `translateY(${-rotations[index]}em)`;
                             requestAnimationFrame(() => { wheel.style.transition = ""; });
                         }
-                    }, 450);
+                    }, 450 + dynamicDelay);
                 }
             });
             isClockInitialized = true;
         }
 
-        // Обновление ровно по границе минуты с помощью setTimeout
         function syncClockToNextMinute() {
             if (!isLocked) {
                 const now = new Date();
@@ -567,11 +567,10 @@
         function getSolarPosition(date, lat, lon) {
             if (!lat || !lon || !window.SunCalc) return { azimuth: 0, altitude: -90 };
             const pos = window.SunCalc.getPosition(date, lat, lon);
-            let azimuth = (pos.azimuth * 180 / Math.PI + 180) % 360; // N=0, E=90, S=180, W=270
+            let azimuth = (pos.azimuth * 180 / Math.PI + 180) % 360;
             return { azimuth, altitude: pos.altitude * 180 / Math.PI };
         }
 
-        // Разворачивает азимут относительно базы для корректного поиска через границу 360
         function unwrapAzimuth(az, base) {
             let res = az;
             while (res - base > 180) res -= 360;
@@ -598,16 +597,23 @@
             setSvgDotPosition(currentSunDot, currentSunAzimuth, 115);
         }
 
-        // Бинарный поиск: 365 дней * 24 часа. Сначала грубый скан, потом 20 итераций точного поиска
         function findSolarPassage(targetAzimuth, lat, lon) {
             const now = new Date();
             let t = now.getTime();
             
+            const d1 = new Date();
+            const d2 = new Date();
+            const dMid = new Date();
+
             for (let i = 0; i < 365 * 24; i++) {
                 let t1 = t + i * 3600000;
                 let t2 = t1 + 3600000;
-                let az1 = getSolarPosition(new Date(t1), lat, lon).azimuth;
-                let az2 = getSolarPosition(new Date(t2), lat, lon).azimuth;
+
+                d1.setTime(t1);
+                d2.setTime(t2);
+
+                let az1 = getSolarPosition(d1, lat, lon).azimuth;
+                let az2 = getSolarPosition(d2, lat, lon).azimuth;
 
                 let uAz2 = unwrapAzimuth(az2, az1);
                 let uTarget = unwrapAzimuth(targetAzimuth, az1);
@@ -616,18 +622,24 @@
                 let maxAz = Math.max(az1, uAz2);
 
                 if (uTarget >= minAz && uTarget <= maxAz) {
+                    let direction = Math.sign(uAz2 - az1);
+                    if (direction === 0) continue;
+
                     let left = t1, right = t2;
-                    // Бинарный поиск до миллисекунд (20 итераций)
+
                     for (let step = 0; step < 20; step++) {
                         let mid = (left + right) / 2;
-                        let azMid = getSolarPosition(new Date(mid), lat, lon).azimuth;
+                        dMid.setTime(mid);
+                        
+                        let azMid = getSolarPosition(dMid, lat, lon).azimuth;
                         let uAzMid = unwrapAzimuth(azMid, az1);
 
-                        // Учитываем направление движения солнца в данный момент (обычно > az1, но бывает ретроградно из-за проекции)
-                        if (az1 < uAz2) {
-                            if (uAzMid > uTarget) right = mid; else left = mid;
+                        if (direction > 0) {
+                            if (uAzMid > uTarget) right = mid;
+                            else left = mid;
                         } else {
-                            if (uAzMid < uTarget) right = mid; else left = mid;
+                            if (uAzMid < uTarget) right = mid;
+                            else left = mid;
                         }
                     }
                     return new Date((left + right) / 2);
@@ -662,7 +674,6 @@
             return { dateStr, timeStr, special };
         }
 
-        // ==================== Компас и UI ====================
         function handleOrientation(e) {
             let heading = e.webkitCompassHeading || (e.alpha !== null ? 360 - e.alpha : null);
             if (heading !== null) {
@@ -696,14 +707,12 @@
             isCalculating = true;
             isLocked = true;
             
-            // Фиксируем азимут для расчета по текущему видимому положению компаса
             targetAzimuth = currentDisplayHeading;
             if (targetAzimuth < 0) targetAzimuth += 360;
             
             dateLabel.textContent = '';
             clockEl.classList.add('loading');
 
-            // Асинхронно запускаем алгоритм
             setTimeout(() => {
                 const passageDate = findSolarPassage(targetAzimuth, userLat, userLon);
                 const { dateStr, timeStr, special } = formatResult(passageDate, userLat, userLon);
@@ -713,11 +722,9 @@
                 animatingSunDot.style.display = 'block';
                 animatingSunDot.setAttribute('opacity', '1');
 
-                // Анимационный сторителлинг
                 function animateStory(now) {
                     const elapsed = now - startT;
                     
-                    // Фаза 1: Вылет мишени и лазера (0 - 350ms)
                     let p1 = Math.min(elapsed / 350, 1);
                     let ease1 = 1 - Math.pow(1 - p1, 3);
                     let targetR = ease1 * 140;
@@ -728,7 +735,6 @@
                     shootLine.setAttribute('y2', 170 + targetR * Math.sin(rad));
                     shootLine.setAttribute('opacity', (p1 < 0.6 ? p1 * 1.5 : (1 - p1) * 2.5) * 0.4);
 
-                    // Фаза 2: Солнце проходит по орбите до мишени (350 - 1050ms)
                     if (elapsed > 350) {
                         let p2 = Math.min((elapsed - 350) / 700, 1);
                         let ease2 = 1 - Math.pow(1 - p2, 4); 
@@ -741,7 +747,6 @@
                         let currentAz = startAz + diff * ease2;
                         setSvgDotPosition(animatingSunDot, currentAz, 115);
 
-                        // Финал: Вспышка и вывод данных
                         if (p2 >= 1) {
                             animatingSunDot.setAttribute('opacity', '0');
                             targetSunDot.setAttribute('r', '10');
@@ -770,7 +775,6 @@
             else executeCalculation();
         }
 
-        // ==================== Инициализация ====================
         if (!localStorage.getItem('onboarding_done')) {
             startOverlay.style.display = 'none';
         } else {
@@ -848,7 +852,6 @@
             }
         });
 
-        // Photon API с кэшированием по округленным координатам (~11км)
         function reverseGeocode(lat, lon) {
             const cacheKey = `city_photon_${lat.toFixed(1)}_${lon.toFixed(1)}`;
             const cachedCity = localStorage.getItem(cacheKey);
