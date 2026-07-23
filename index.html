@@ -470,21 +470,23 @@
         ];
 
         directions.forEach(dir => {
-            const rad = (dir.angle - 90) * Math.PI / 180;
-            const x = 170 + LETTER_OFFSET * Math.cos(rad);
-            const y = 170 + LETTER_OFFSET * Math.sin(rad);
-            
-            const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-            text.setAttribute('x', x);
-            text.setAttribute('y', y); 
-            text.setAttribute('fill', dir.fill);
-            text.setAttribute('font-size', '14');
-            text.setAttribute('font-weight', dir.weight);
-            text.setAttribute('text-anchor', 'middle');
-            text.setAttribute('dominant-baseline', 'central');
-            text.textContent = dir.label;
-            lettersGroup.appendChild(text);
-        });
+    const rad = (dir.angle - 90) * Math.PI / 180;
+    const x = 170 + LETTER_OFFSET * Math.cos(rad);
+    const y = 170 + LETTER_OFFSET * Math.sin(rad);
+    
+    const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    text.setAttribute('x', x);
+    text.setAttribute('y', y); 
+    text.setAttribute('fill', dir.fill);
+    text.setAttribute('font-size', '14');
+    text.setAttribute('font-weight', dir.weight);
+    text.setAttribute('text-anchor', 'middle');
+    text.setAttribute('dominant-baseline', 'central');
+    //  Поворот: -угол, чтобы низ буквы смотрел в центр
+    text.setAttribute('transform', `rotate(${-dir.angle}, ${x}, ${y})`);
+    text.textContent = dir.label;
+    lettersGroup.appendChild(text);
+});
 
         const dateLabel = document.getElementById('dateLabel');
         const clockEl = document.getElementById('clock');
