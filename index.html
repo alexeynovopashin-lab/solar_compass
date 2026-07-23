@@ -456,29 +456,29 @@
 
         const LETTER_OFFSET = 154; 
         const directions = [
-            { label: 'N', angle: 0, fill: '#ffd25f', weight: '600' },
-            { label: 'E', angle: 90, fill: 'rgba(255,255,255,0.4)', weight: '500' },
-            { label: 'S', angle: 180, fill: 'rgba(255,255,255,0.4)', weight: '500' },
-            { label: 'W', angle: 270, fill: 'rgba(255,255,255,0.4)', weight: '500' }
+            { label: 'N', angle: 0,   fill: '#ffd25f', weight: '600', fontSize: '18', rotate: 0 },
+            { label: 'E', angle: 90,  fill: 'rgba(255,255,255,0.4)', weight: '500', fontSize: '14', rotate: 90 },
+            { label: 'S', angle: 180, fill: 'rgba(255,255,255,0.4)', weight: '500', fontSize: '14', rotate: 180 },
+            { label: 'W', angle: 270, fill: 'rgba(255,255,255,0.4)', weight: '500', fontSize: '14', rotate: -90 }
         ];
 
-        directions.forEach(dir => {
-            const rad = (dir.angle - 90) * Math.PI / 180;
-            const x = 170 + LETTER_OFFSET * Math.cos(rad);
-            const y = 170 + LETTER_OFFSET * Math.sin(rad);
-            
-            const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-            text.setAttribute('x', x);
-            text.setAttribute('y', y); 
-            text.setAttribute('fill', dir.fill);
-            text.setAttribute('font-size', '14');
-            text.setAttribute('font-weight', dir.weight);
-            text.setAttribute('text-anchor', 'middle');
-            text.setAttribute('dominant-baseline', 'central');
-            // Поворот буквы, чтобы низ смотрел в центр
-            text.setAttribute('transform', `rotate(${-dir.angle}, ${x}, ${y})`);
-            text.textContent = dir.label;
-            lettersGroup.appendChild(text);
+            directions.forEach(dir => {
+        const rad = (dir.angle - 90) * Math.PI / 180;
+        const x = 170 + LETTER_OFFSET * Math.cos(rad);
+        const y = 170 + LETTER_OFFSET * Math.sin(rad);
+    
+        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        text.setAttribute('x', x);
+        text.setAttribute('y', y); 
+        text.setAttribute('fill', dir.fill);
+        text.setAttribute('font-size', dir.fontSize);      // ← разный размер
+        text.setAttribute('font-weight', dir.weight);
+        text.setAttribute('text-anchor', 'middle');
+        text.setAttribute('dominant-baseline', 'central');
+    // Явный поворот из данных
+    text.setAttribute('transform', `rotate(${dir.rotate}, ${x}, ${y})`);
+    text.textContent = dir.label;
+    lettersGroup.appendChild(text);
         });
 
         const dateLabel = document.getElementById('dateLabel');
