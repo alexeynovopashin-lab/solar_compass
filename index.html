@@ -1,3 +1,4 @@
+```html
 <!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -66,7 +67,8 @@
             --surface: rgba(255, 255, 255, 0.08);
             --surface-border: rgba(255, 255, 255, 0.15);
             --compass-size: 340px;
-            --zoom-scale: 4;
+            --zoom-scale: 3;
+            --btn-size: 72px;
         }
 
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -86,7 +88,6 @@
             user-select: none;
             -webkit-user-select: none;
             -webkit-tap-highlight-color: transparent;
-            transition: all 0.3s ease;
         }
 
         body::before {
@@ -100,34 +101,6 @@
             transform: translate(-50%, -50%);
             pointer-events: none;
             z-index: 0;
-        }
-
-        /* ZOOM-режим */
-        body.zoomed {
-            justify-content: flex-end; /* всё содержимое прижимаем к низу, компас уезжает вниз */
-            padding-bottom: 0;
-        }
-        body.zoomed .display-header {
-            /* часы остаются сверху, но увеличиваются */
-        }
-        body.zoomed .compass-viewport {
-            transform: scale(var(--zoom-scale)) translateY(calc(40px)); /* подгон смещения, чтобы центр компаса оказался под кнопкой */
-            margin-bottom: -20px;
-        }
-        body.zoomed .clock {
-            font-size: 120px; /* увеличенные часы */
-            height: 120px;
-        }
-        body.zoomed .date-label,
-        body.zoomed .location-name {
-            display: none;
-        }
-        body.zoomed .shutter-btn {
-            z-index: 20;
-            margin-bottom: 20px;
-        }
-        body.zoomed .viewport-notch {
-            top: -2px; /* метка остаётся наверху, теперь она в увеличенном компасе */
         }
 
         .start-overlay {
@@ -195,10 +168,8 @@
             width: 100%;
             max-width: 340px;
             overflow: hidden;
-            transition: font-size 0.3s ease, height 0.3s ease;
         }
 
-        /* Градиентные маски */
         .clock::before {
             content: "";
             position: absolute;
@@ -265,9 +236,17 @@
             align-items: center;
             justify-content: center;
             cursor: pointer;
-            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            transition: transform 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+            transform-origin: center bottom;
+            margin-bottom: 0;
         }
         .compass-viewport.locked { transform: scale(1.04); }
+
+        /* ZOOM – двигаем компас вниз так, чтобы его центр совпал с кнопкой */
+        body.zoomed .compass-viewport {
+            transform: scale(var(--zoom-scale)) translateY(calc(-1 * (var(--compass-size) / 2 - var(--btn-size) / 2)));
+            margin-bottom: 20px;
+        }
 
         .viewport-notch {
             position: absolute;
@@ -308,8 +287,8 @@
         }
 
         .shutter-btn {
-            width: 72px;
-            height: 72px;
+            width: var(--btn-size);
+            height: var(--btn-size);
             border-radius: 50%;
             border: 3px solid rgba(255, 255, 255, 0.85);
             background: transparent;
@@ -693,14 +672,18 @@
         }
 
         // ==================== Zoom-режим ====================
-        let zoomTapCount = 0;
         let zoomTapTimer = null;
+        let zoomTapCount = 0;
 
-        function handleCompassTapForZoom() {
-            if (appState === STATE.ZOOM) return; // выход через кнопку
+        function handleCompassTap(e) {
+            if (appState === STATE.ZOOM) return;
+            
             zoomTapCount++;
             if (zoomTapCount === 1) {
-                zoomTapTimer = setTimeout(() => { zoomTapCount = 0; }, 500);
+                zoomTapTimer = setTimeout(() => {
+                    zoomTapCount = 0;
+                    toggleLock();
+                }, 400);
             } else if (zoomTapCount === 3) {
                 clearTimeout(zoomTapTimer);
                 zoomTapCount = 0;
@@ -708,11 +691,17 @@
             }
         }
 
-        function handleShutterTapForZoom() {
-            if (appState !== STATE.ZOOM) return;
+        function handleShutterTap(e) {
+            if (appState !== STATE.ZOOM) {
+                toggleLock();
+                return;
+            }
+            
             zoomTapCount++;
             if (zoomTapCount === 1) {
-                zoomTapTimer = setTimeout(() => { zoomTapCount = 0; }, 500);
+                zoomTapTimer = setTimeout(() => {
+                    zoomTapCount = 0;
+                }, 400);
             } else if (zoomTapCount === 3) {
                 clearTimeout(zoomTapTimer);
                 zoomTapCount = 0;
@@ -725,23 +714,14 @@
             previousState = appState;
             setAppState(STATE.ZOOM);
             document.body.classList.add('zoomed');
-            // Остановить обновление компаса и часов
-            clearTimeout(clockTimeoutId);
-            // Зафиксировать положение компаса в текущем visualHeading
-            compassSvg.style.transform = `rotate(${-visualHeading}deg)`;
+            compassViewport.classList.add('locked');
         }
 
         function exitZoomMode() {
             if (appState !== STATE.ZOOM) return;
             document.body.classList.remove('zoomed');
+            compassViewport.classList.remove('locked');
             setAppState(previousState);
-            // Восстановить часы
-            if (previousState === STATE.READY) {
-                syncClockToNextMinute();
-            } else if (previousState === STATE.LOCKED) {
-                // Ничего, часы останутся на найденном времени
-            }
-            // Компас снова будет плавно следовать за датчиком
         }
 
         // ==================== Астрономия ====================
@@ -892,7 +872,7 @@
                 clearInterval(stabilizationTimer);
                 stabilizationTimer = null;
             }
-            document.body.classList.remove('zoomed'); // на всякий случай
+            document.body.classList.remove('zoomed');
         }
 
         function handleOrientation(e) {
@@ -1122,31 +1102,9 @@
             });
         }
 
-        // Обработчики нажатий
-        calcBtn.addEventListener('click', (e) => {
-            if (appState === STATE.ZOOM) {
-                handleShutterTapForZoom();
-                return;
-            }
-            toggleLock();
-        });
-
-        compassViewport.addEventListener('click', (e) => {
-            if (appState === STATE.ZOOM) return;
-            // Сначала попытка зума (тройной тап)
-            handleCompassTapForZoom();
-            // Обычный одиночный клик тоже должен работать, но только если не было тройного тапа
-            // Поэтому используем setTimeout и проверяем zoomTapCount
-            setTimeout(() => {
-                if (zoomTapCount === 0 && appState !== STATE.ZOOM) {
-                    // это был одиночный клик, обрабатываем как обычный расчёт/сброс
-                    toggleLock();
-                }
-            }, 500);
-        });
-
-        // Предотвращаем двойной вызов toggleLock при тройном тапе
-        // путём сброса zoomTapCount после обработки зума
+        // Обработчики событий
+        calcBtn.addEventListener('click', handleShutterTap);
+        compassViewport.addEventListener('click', handleCompassTap);
     </script>
 </body>
 </html>
