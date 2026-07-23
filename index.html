@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
     <title>Солнечный компас</title>
 
-    <!-- Манифест и иконка (data URI для полной автономии) -->
+    <!-- Манифест и иконка (data URI для автономности) -->
     <link rel="manifest" href="data:application/manifest+json,%7B%22name%22%3A%22%D0%A1%D0%BE%D0%BB%D0%BD%D0%B5%D1%87%D0%BD%D1%8B%D0%B9%20%D0%BA%D0%BE%D0%BC%D0%BF%D0%B0%D1%81%22%2C%22short_name%22%3A%22%D0%A1%D0%BE%D0%BB%D0%BD%D1%86%D0%B5%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22theme_color%22%3A%22%23050505%22%2C%22background_color%22%3A%22%23050505%22%7D">
     <meta name="theme-color" content="#050505">
     <link rel="apple-touch-icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=">
@@ -520,26 +520,24 @@
         let animationFrameId = null;
         let clockTimeoutId = null;
         let sunUpdateIntervalId = null;
-        let stabilizationTimer = null; // таймер автоматической стабилизации
+        let stabilizationTimer = null;
 
-        // История положений для проверки стабильности
         const headingHistory = [];
 
         function recordHeading(heading) {
             const now = performance.now();
             headingHistory.push({ value: heading, time: now });
-            // Держим окно 500 мс
             while (headingHistory.length > 0 && now - headingHistory[0].time > 500) {
                 headingHistory.shift();
             }
         }
 
         function isHeadingStable() {
-            if (headingHistory.length < 5) return false; // недостаточно данных
+            if (headingHistory.length < 5) return false;
             const values = headingHistory.map(h => h.value);
             const min = Math.min(...values);
             const max = Math.max(...values);
-            return (max - min) < 5; // разброс менее 5°
+            return (max - min) < 5;
         }
 
         // ==================== Компас: плавность без рывков ====================
@@ -743,16 +741,30 @@
             let special = '';
             if (lat !== null && lon !== null) {
                 const pos = getSolarPosition(date, lat, lon);
-                const alt = Math.round(pos.altitude);
+                const alt = pos.altitude;
                 const times = window.SunCalc.getTimes(date, lat, lon);
+                const solarNoon = times.solarNoon;
+                const isMorning = date < solarNoon;
+                
+                // Определяем фазу по высоте солнца
                 let phase = '';
+                if (alt < -18) {
+                    phase = 'Ночь';
+                } else if (alt < -12) {
+                    phase = 'Астр. сумерки';
+                } else if (alt < -6) {
+                    phase = 'Навиг. сумерки';
+                } else if (alt < -0.833) {
+                    phase = 'Синий час';
+                } else if (alt < 0) {
+                    phase = isMorning ? 'Восход' : 'Закат';
+                } else if (alt < 6) {
+                    phase = 'Золотой час';
+                } else {
+                    phase = 'День';
+                }
                 
-                if ((times.sunsetStart && date >= times.sunsetStart && date <= times.goldenHourEnd) || 
-                    (times.sunrise && date >= times.sunrise && date <= times.goldenHour)) phase = 'Золотой час';
-                else if ((times.sunset && date >= times.sunset && date <= times.dusk) || 
-                         (times.dawn && date >= times.dawn && date <= times.sunrise)) phase = 'Синий час';
-                
-                special = ` • ${phase ? phase + ' ' : ''}☀︎ ${alt}°`;
+                special = ` • ${phase} ☀︎ ${Math.round(alt)}°`;
             }
             return { dateStr, timeStr, special, valid: true };
         }
@@ -773,7 +785,6 @@
             syncClockToNextMinute();
             updateCurrentSunPosition();
             if (animationFrameId) { cancelAnimationFrame(animationFrameId); animationFrameId = null; }
-            // Очищаем таймер стабилизации, если был
             if (stabilizationTimer) {
                 clearInterval(stabilizationTimer);
                 stabilizationTimer = null;
@@ -791,24 +802,21 @@
         function executeCalculation() {
             if (userLat === null || appState !== STATE.READY) return;
 
-            // Проверка стабильности компаса
             if (!isHeadingStable()) {
                 dateLabel.textContent = 'Калибровка…';
-                // Запускаем таймер автоматической проверки
                 if (!stabilizationTimer) {
                     stabilizationTimer = setInterval(() => {
                         if (isHeadingStable()) {
                             clearInterval(stabilizationTimer);
                             stabilizationTimer = null;
                             dateLabel.textContent = '';
-                            executeCalculation(); // повторный вызов после стабилизации
+                            executeCalculation();
                         }
                     }, 100);
                 }
                 return;
             }
 
-            // Очищаем таймер, если он был
             if (stabilizationTimer) {
                 clearInterval(stabilizationTimer);
                 stabilizationTimer = null;
