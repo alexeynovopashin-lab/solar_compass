@@ -408,7 +408,8 @@
         <div class="location-name" id="locationLabel">Определение...</div>
     </div>
 
-    <div class="build-number" id="buildNumber"></div>
+    <!-- Статический номер сборки -->
+    <div class="build-number">Build 2026.07.23 18:45:00</div>
 
     <script>
         // ==================== Безопасное хранилище ====================
@@ -425,14 +426,6 @@
                     setItem(key, value) { memoryStorage[key] = value; }
                 };
             }
-        })();
-
-        (function setBuildNumber() {
-            const now = new Date();
-            const pad = n => String(n).padStart(2, '0');
-            const dateStr = `${now.getFullYear()}.${pad(now.getMonth()+1)}.${pad(now.getDate())}`;
-            const timeStr = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
-            document.getElementById('buildNumber').textContent = `Build ${dateStr} ${timeStr}`;
         })();
 
         // ==================== DOM-элементы ====================
@@ -470,23 +463,23 @@
         ];
 
         directions.forEach(dir => {
-    const rad = (dir.angle - 90) * Math.PI / 180;
-    const x = 170 + LETTER_OFFSET * Math.cos(rad);
-    const y = 170 + LETTER_OFFSET * Math.sin(rad);
-    
-    const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-    text.setAttribute('x', x);
-    text.setAttribute('y', y); 
-    text.setAttribute('fill', dir.fill);
-    text.setAttribute('font-size', '14');
-    text.setAttribute('font-weight', dir.weight);
-    text.setAttribute('text-anchor', 'middle');
-    text.setAttribute('dominant-baseline', 'central');
-    //  Поворот: -угол, чтобы низ буквы смотрел в центр
-    text.setAttribute('transform', `rotate(${-dir.angle}, ${x}, ${y})`);
-    text.textContent = dir.label;
-    lettersGroup.appendChild(text);
-});
+            const rad = (dir.angle - 90) * Math.PI / 180;
+            const x = 170 + LETTER_OFFSET * Math.cos(rad);
+            const y = 170 + LETTER_OFFSET * Math.sin(rad);
+            
+            const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            text.setAttribute('x', x);
+            text.setAttribute('y', y); 
+            text.setAttribute('fill', dir.fill);
+            text.setAttribute('font-size', '14');
+            text.setAttribute('font-weight', dir.weight);
+            text.setAttribute('text-anchor', 'middle');
+            text.setAttribute('dominant-baseline', 'central');
+            // Поворот буквы, чтобы низ смотрел в центр
+            text.setAttribute('transform', `rotate(${-dir.angle}, ${x}, ${y})`);
+            text.textContent = dir.label;
+            lettersGroup.appendChild(text);
+        });
 
         const dateLabel = document.getElementById('dateLabel');
         const clockEl = document.getElementById('clock');
@@ -664,7 +657,6 @@
         function stopChaosClock() {
             chaosTimers.forEach(t => clearInterval(t));
             chaosTimers = [];
-            // Восстанавливаем previousDigits из положения вращения (для плавного перехода)
             wheels.forEach((wheel, index) => {
                 previousDigits[index] = Math.floor(rotations[index]) % 10;
             });
