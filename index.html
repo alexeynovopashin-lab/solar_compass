@@ -358,10 +358,14 @@
         const lettersGroup = document.getElementById('lettersGroup');
         const cx = 170, cy = 170;
         const r1 = 160;
-        const r2_major = r1 - 12;
-        const r2_minor = r1 - 6;
+        const r2_major = r1 - 12; // 148
+        const r2_minor = r1 - 6;  // 154
 
         for (let i = 0; i < 360; i += 5) {
+            // Делаем аккуратные разрывы (пропускаем саму букву и соседние +-5 градусов)
+            const mod = i % 90;
+            if (mod <= 5 || mod >= 85) continue;
+
             const isMajor = i % 30 === 0;
             const r2 = isMajor ? r2_major : r2_minor;
             const rad = (i - 90) * Math.PI / 180;
@@ -376,8 +380,8 @@
             ticksGroup.appendChild(line);
         }
 
-        // Буквы сторон света — теперь не обрезаются (LETTER_OFFSET = 162)
-        const LETTER_OFFSET = 162;
+        // Буквы сторон света — ставим ровно на радиус рисок
+        const LETTER_OFFSET = 154; 
         const directions = [
             { label: 'N', angle: 0, fill: '#ffd25f', weight: '600' },
             { label: 'E', angle: 90, fill: 'rgba(255,255,255,0.4)', weight: '500' },
@@ -392,11 +396,12 @@
             
             const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
             text.setAttribute('x', x);
-            text.setAttribute('y', y + 4);
+            text.setAttribute('y', y); 
             text.setAttribute('fill', dir.fill);
             text.setAttribute('font-size', '14');
             text.setAttribute('font-weight', dir.weight);
             text.setAttribute('text-anchor', 'middle');
+            text.setAttribute('dominant-baseline', 'central'); // Идеальное выравнивание по центру
             text.textContent = dir.label;
             lettersGroup.appendChild(text);
         });
