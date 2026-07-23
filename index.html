@@ -87,6 +87,7 @@
             user-select: none;
             -webkit-user-select: none;
             -webkit-tap-highlight-color: transparent;
+            touch-action: manipulation;
         }
 
         body::before {
@@ -140,13 +141,13 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            transition: opacity 0.3s ease;
+            transition: transform 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+            transform-origin: center top;
         }
 
-        /* Скрываем часы в zoom-режиме */
+        /* Пропорционально увеличиваем часы и дату в zoom-режиме */
         body.zoomed .display-header {
-            opacity: 0;
-            pointer-events: none;
+            transform: scale(1.25);
         }
 
         .date-label {
@@ -245,9 +246,10 @@
             transition: transform 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
             transform-origin: center center;
             margin-bottom: 0;
+            touch-action: manipulation;
         }
 
-        /* Исправленный порядок: сначала смещение, потом масштаб */
+        /* Точный точечный сдвиг центра компаса под кнопку спуска */
         body.zoomed .compass-viewport {
             transform: translateY(var(--zoom-offset, 0px)) scale(var(--zoom-scale));
         }
@@ -282,7 +284,7 @@
 
         .footer-meta {
             position: relative;
-            z-index: 1;
+            z-index: 10; /* Держим кнопку поверх увеличенного компаса */
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -304,6 +306,7 @@
             outline: none;
             -webkit-tap-highlight-color: transparent;
             transition: border-color 0.3s ease, transform 0.15s ease;
+            touch-action: manipulation;
         }
         .shutter-btn:active { transform: scale(0.93); }
 
@@ -433,8 +436,8 @@
             document.getElementById('buildNumber').textContent = build;
         })();
 
-        // ==================== Переменная ручной подстройки зума ====================
-        const ZOOM_FINE_TUNE = 0; // Измените значение (в пикселях), чтобы точно совместить нижний край компаса с центром кнопки
+        // Ручная микроподстройка смещения при необходимости (в пикселях)
+        const ZOOM_FINE_TUNE = 0; 
 
         // ==================== Безопасное хранилище ====================
         const memoryStorage = {};
@@ -520,9 +523,9 @@
         const onboardingBtn = document.getElementById('onboardingBtn');
 
         // ==================== Машина состояний ====================
-        const STATE = { IDLE: 'idle', PERMISSION: 'permission', READY: 'ready', CALCULATING: 'calculating', LOCKED: 'locked', ZOOM: 'zoom' };
+        const STATE = { IDLE: 'idle', PERMISSION: 'permission', READY: 'ready', CALCULATING: 'calculating', LOCKED: 'locked' };
         let appState = STATE.IDLE;
-        let previousState = STATE.IDLE;
+        let isZoomed = false; // Zoom как независимый флаг
         let chaosTimers = [];
 
         function setAppState(newState) {
@@ -558,7 +561,7 @@
             return (max - min) < 5;
         }
 
-        // ==================== Компас (работает и в ZOOM) ====================
+        // ==================== Компас ====================
         function normalizeAngle(angle) {
             return ((angle % 360) + 360) % 360;
         }
@@ -629,7 +632,6 @@
                 previousDigits[index] = target;
 
                 const mid = (TOTAL_SECTIONS / 2) * 10;
-                const threshold = 5 * 10;
                 if (Math.abs(rotations[index] - mid) > (TOTAL_SECTIONS/2 - 5) * 10) {
                     const resetTime = duration * 1000 + cascadeDelay[index] + 50;
                     setTimeout(() => {
@@ -645,7 +647,7 @@
         }
 
         function syncClockToNextMinute() {
-            if (appState === STATE.READY || appState === STATE.ZOOM) {
+            if (appState === STATE.READY) {
                 const now = new Date();
                 const timeStr = now.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
                 setClockTime(timeStr);
@@ -686,68 +688,90 @@
             });
         }
 
-        // ==================== Zoom-режим ====================
-        let zoomTapTimer = null;
-        let zoomTapCount = 0;
-
-        function handleCompassTap(e) {
-            zoomTapCount++;
-            clearTimeout(zoomTapTimer);
-
-            if (zoomTapCount === 3) {
-                zoomTapCount = 0;
-                if (appState === STATE.ZOOM) {
-                    exitZoomMode();
-                } else {
-                    enterZoomMode();
-                }
-                return;
-            }
-
-            // Таймер для сброса счётчика (если не набралось 3 тапа)
-            zoomTapTimer = setTimeout(() => {
-                // Если после таймаута остался 1 тап – это одиночный клик (toggleLock)
-                if (zoomTapCount === 1 && appState !== STATE.ZOOM) {
-                    toggleLock();
-                }
-                zoomTapCount = 0;
-            }, 450);
-        }
-
-        function handleShutterTap(e) {
-            if (appState === STATE.ZOOM) {
-                return; // В зуме кнопка спуска не активна
-            }
-            toggleLock();
+        // ==================== Логика Zoom-режима ====================
+        function calculateZoomOffset() {
+            const compassRect = compassViewport.getBoundingClientRect();
+            const buttonRect = calcBtn.getBoundingClientRect();
+            
+            // Расстояние между центром компаса и центром кнопки спуска
+            const compassCenterY = compassRect.top + compassRect.height / 2;
+            const buttonCenterY = buttonRect.top + buttonRect.height / 2;
+            
+            return (buttonCenterY - compassCenterY) + ZOOM_FINE_TUNE;
         }
 
         function enterZoomMode() {
-            if (appState === STATE.ZOOM) return;
-            previousState = appState;
-
-            const compassRect = compassViewport.getBoundingClientRect();
-            const buttonRect = calcBtn.getBoundingClientRect();
-            const buttonCenterY = buttonRect.top + buttonRect.height / 2;
-            
-            // Нижний край компаса после масштабирования
-            const compassBottomAfterScale = compassRect.top + compassRect.height + (compassRect.height / 2) * (2 - 1);
-            const offset = (buttonCenterY - compassBottomAfterScale) + ZOOM_FINE_TUNE;
-
+            if (isZoomed) return;
+            const offset = calculateZoomOffset();
             document.body.style.setProperty('--zoom-offset', offset + 'px');
-            setAppState(STATE.ZOOM);
-
-            // Анимация начнётся в следующем кадре, когда переменная уже применена
-            requestAnimationFrame(() => {
-                document.body.classList.add('zoomed');
-            });
+            isZoomed = true;
+            document.body.classList.add('zoomed');
         }
 
         function exitZoomMode() {
-            if (appState !== STATE.ZOOM) return;
+            if (!isZoomed) return;
+            isZoomed = false;
             document.body.classList.remove('zoomed');
             document.body.style.removeProperty('--zoom-offset');
-            setAppState(previousState);
         }
+
+        function toggleZoomMode() {
+            if (isZoomed) exitZoomMode();
+            else enterZoomMode();
+        }
+
+        // Детекторы тапов
+        let compassTapCount = 0;
+        let compassTapTimer = null;
+
+        function handleCompassTap(e) {
+            compassTapCount++;
+            clearTimeout(compassTapTimer);
+
+            if (compassTapCount === 3) {
+                compassTapCount = 0;
+                toggleZoomMode();
+                return;
+            }
+
+            compassTapTimer = setTimeout(() => {
+                if (compassTapCount === 1) {
+                    toggleLock();
+                }
+                compassTapCount = 0;
+            }, 300);
+        }
+
+        let shutterTapCount = 0;
+        let shutterTapTimer = null;
+
+        function handleShutterTap(e) {
+            shutterTapCount++;
+            clearTimeout(shutterTapTimer);
+
+            if (shutterTapCount === 3) {
+                shutterTapCount = 0;
+                toggleZoomMode();
+                return;
+            }
+
+            shutterTapTimer = setTimeout(() => {
+                if (shutterTapCount === 1) {
+                    toggleLock();
+                }
+                shutterTapCount = 0;
+            }, 300);
+        }
+
+        // Обновление смещения при смене ориентации экрана
+        window.addEventListener('resize', () => {
+            if (isZoomed) {
+                document.body.classList.remove('zoomed');
+                const offset = calculateZoomOffset();
+                document.body.style.setProperty('--zoom-offset', offset + 'px');
+                document.body.classList.add('zoomed');
+            }
+        });
 
         // ==================== Астрономия ====================
         function getSolarPosition(date, lat, lon) {
@@ -897,12 +921,11 @@
                 clearInterval(stabilizationTimer);
                 stabilizationTimer = null;
             }
-            document.body.classList.remove('zoomed');
         }
 
         function handleOrientation(e) {
             let heading = e.webkitCompassHeading || (e.alpha !== null ? 360 - e.alpha : null);
-            if (heading !== null && (appState === STATE.READY || appState === STATE.ZOOM)) {
+            if (heading !== null && (appState === STATE.READY || appState === STATE.LOCKED)) {
                 realHeading = normalizeAngle(heading);
                 recordHeading(realHeading);
             }
@@ -1005,7 +1028,7 @@
         }
 
         function toggleLock() {
-            if (appState === STATE.CALCULATING || appState === STATE.ZOOM) return;
+            if (appState === STATE.CALCULATING) return;
             if (appState === STATE.LOCKED) {
                 resetLock();
             } else if (appState === STATE.READY) {
@@ -1127,7 +1150,7 @@
             });
         }
 
-        // Обработчики событий
+        // Назначение обработчиков тапов
         calcBtn.addEventListener('click', handleShutterTap);
         compassViewport.addEventListener('click', handleCompassTap);
     </script>
