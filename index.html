@@ -4,13 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
     <title>Солнечный компас</title>
-    
-    <!-- PWA -->
-    <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#050505">
-    <link rel="apple-touch-icon" href="icon-192.png">
 
-    <!-- Полный исходник SunCalc 2.0.1 (MIT) -->
+    <!-- Манифест и иконка – data URI для полной автономии.
+         В production рекомендуется заменить на реальные файлы. -->
+    <link rel="manifest" href="data:application/manifest+json,%7B%22name%22%3A%22%D0%A1%D0%BE%D0%BB%D0%BD%D0%B5%D1%87%D0%BD%D1%8B%D0%B9%20%D0%BA%D0%BE%D0%BC%D0%BF%D0%B0%D1%81%22%2C%22short_name%22%3A%22%D0%A1%D0%BE%D0%BB%D0%BD%D1%86%D0%B5%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22theme_color%22%3A%22%23050505%22%2C%22background_color%22%3A%22%23050505%22%7D">
+    <meta name="theme-color" content="#050505">
+    <link rel="apple-touch-icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=">
+
+    <!-- SunCalc 2.0.1 (MIT) – встроен -->
     <script>
         (function () {
             'use strict';
@@ -175,6 +176,21 @@
             align-items: center;
             font-size: 40px;
             letter-spacing: 8px;
+            color: var(--text-secondary);
+        }
+
+        .clock.empty .digit,
+        .clock.empty .separator { opacity: 0; }
+
+        .clock.empty::after {
+            content: "— — : — —";
+            position: absolute;
+            inset: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 48px;
+            letter-spacing: 6px;
             color: var(--text-secondary);
         }
 
@@ -346,7 +362,7 @@
 
     <div class="onboarding-overlay" id="onboardingOverlay">
         <div class="onboarding-card">
-            <p>Направьте телефон в интересующую сторону</p>
+            <p>Направьте телефон в интересующую сторону<br><span style="font-size:13px;color:var(--text-secondary);">(держите горизонтально, экраном вверх)</span></p>
             <p>Нажмите кнопку — узнаете, когда там будет солнце</p>
             <button class="start-btn" id="onboardingBtn">Понятно</button>
         </div>
@@ -396,6 +412,23 @@
     <div class="build-number">Build 2026.07.23</div>
 
     <script>
+        // ==================== Безопасное хранилище ====================
+        const memoryStorage = {};
+        const safeStorage = (() => {
+            try {
+                const testKey = '__storage_test__';
+                localStorage.setItem(testKey, '1');
+                localStorage.removeItem(testKey);
+                return localStorage;
+            } catch (e) {
+                return {
+                    getItem(key) { return memoryStorage[key] || null; },
+                    setItem(key, value) { memoryStorage[key] = value; }
+                };
+            }
+        })();
+
+        // ==================== DOM-элементы ====================
         const ticksGroup = document.getElementById('ticksGroup');
         const lettersGroup = document.getElementById('lettersGroup');
         const cx = 170, cy = 170;
@@ -461,33 +494,50 @@
         const onboardingOverlay = document.getElementById('onboardingOverlay');
         const onboardingBtn = document.getElementById('onboardingBtn');
 
+        // ==================== Машина состояний (используется полностью) ====================
+        const STATE = { IDLE: 'idle', PERMISSION: 'permission', READY: 'ready', CALCULATING: 'calculating', LOCKED: 'locked' };
+        let appState = STATE.IDLE;
+
+        function setAppState(newState) {
+            appState = newState;
+        }
+
+        // ==================== Переменные ====================
         let userLat = null;
         let userLon = null;
-        let isLocked = false;
-        let isCalculating = false;
-        
-        let targetDisplayHeading = 0;
-        let currentDisplayHeading = 0;
-        
+        // realHeading – нормализованный азимут (0–360) от датчика, используется для расчётов
+        let realHeading = 0;
+        // visualHeading – неограниченный угол для плавной анимации SVG
+        let visualHeading = 0;
         let currentSunAzimuth = 0;
         let targetAzimuth = null;
         let animationFrameId = null;
         let clockTimeoutId = null;
         let sunUpdateIntervalId = null;
 
+        // ==================== Компас: плавность без нормализации визуального угла ====================
+        function normalizeAngle(angle) {
+            return ((angle % 360) + 360) % 360;
+        }
+
+        function smoothAngle(target, current) {
+            let diff = target - current;
+            while (diff > 180) diff -= 360;
+            while (diff < -180) diff += 360;
+            return current + diff * 0.15;
+        }
+
         function renderCompass() {
-            if (!isLocked) {
-                let diff = targetDisplayHeading - currentDisplayHeading;
-                if (diff > 180) diff -= 360;
-                if (diff < -180) diff += 360;
-                currentDisplayHeading += diff * 0.15;
-                compassSvg.style.transform = `rotate(${-currentDisplayHeading}deg)`;
+            if (appState !== STATE.LOCKED) {
+                // realHeading уже нормализован в обработчике, visualHeading догоняет его без сброса
+                visualHeading = smoothAngle(realHeading, visualHeading);
+                compassSvg.style.transform = `rotate(${-visualHeading}deg)`;
             }
             requestAnimationFrame(renderCompass);
         }
         renderCompass();
 
-        // ==================== ОДОМЕТР С CARRY-OVER КАСКАДОМ ====================
+        // ==================== ОДОМЕТР (истинный carry-over) ====================
         const wheels = [...document.querySelectorAll(".wheel")];
         const TOTAL_SECTIONS = 30;
         let previousDigits = [0, 0, 0, 0];
@@ -502,42 +552,40 @@
             }
         });
 
-        function getCarryDelay(index) {
-            for (let i = index + 1; i < previousDigits.length; i++) {
-                if (previousDigits[i] !== 9) return 0;
-            }
-            return (previousDigits.length - 1 - index) * 60;
+        function hasCarry(index, newDigits) {
+            if (index === newDigits.length - 1) return false;
+            // Механический carry: младший разряд уменьшился (прошёл полный цикл)
+            return previousDigits[index + 1] > newDigits[index + 1];
+        }
+
+        function getCascadeDelay(index, newDigits) {
+            if (!hasCarry(index, newDigits)) return 0;
+            return 60 + getCascadeDelay(index + 1, newDigits);
         }
 
         function setClockTime(timeStr, forceImmediate = false) {
             const digits = timeStr.replace(":", "").split("").map(Number);
+            if (digits.length !== 4) return;
 
             digits.forEach((targetValue, index) => {
                 const wheel = wheels[index];
-                let currentVal = previousDigits[index];
-
                 if (!isClockInitialized || forceImmediate) {
                     rotations[index] = (TOTAL_SECTIONS / 2) * 10 + targetValue;
                     wheel.style.transition = 'none';
                     wheel.style.transform = `translateY(${-rotations[index]}em)`;
                     previousDigits[index] = targetValue;
-                    
                     requestAnimationFrame(() => { wheel.style.transition = ''; });
-                    return;
-                }
-
-                if (targetValue !== currentVal) {
-                    let diff = targetValue - currentVal;
+                } else if (targetValue !== previousDigits[index]) {
+                    let diff = targetValue - previousDigits[index];
                     if (diff < 0) diff += 10;
-
                     rotations[index] += diff;
-                    
-                    const dynamicDelay = getCarryDelay(index);
-                    wheel.style.transitionDelay = `${dynamicDelay}ms`;
 
+                    const dynamicDelay = getCascadeDelay(index, digits);
+                    wheel.style.transitionDelay = `${dynamicDelay}ms`;
                     wheel.style.transform = `translateY(${-rotations[index]}em)`;
                     previousDigits[index] = targetValue;
 
+                    // Сброс ленты при сильном отклонении
                     setTimeout(() => {
                         if (rotations[index] > (TOTAL_SECTIONS - 5) * 10 || rotations[index] < 5 * 10) {
                             rotations[index] = (TOTAL_SECTIONS / 2) * 10 + targetValue;
@@ -552,7 +600,7 @@
         }
 
         function syncClockToNextMinute() {
-            if (!isLocked) {
+            if (appState !== STATE.LOCKED) {
                 const now = new Date();
                 const timeStr = now.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
                 setClockTime(timeStr);
@@ -561,11 +609,10 @@
             const msToNextMinute = 60000 - (nowMs.getSeconds() * 1000 + nowMs.getMilliseconds());
             clockTimeoutId = setTimeout(syncClockToNextMinute, msToNextMinute);
         }
-        syncClockToNextMinute();
 
-        // ==================== SUNCalc & Algorithms ====================
+        // ==================== Астрономия ====================
         function getSolarPosition(date, lat, lon) {
-            if (!lat || !lon || !window.SunCalc) return { azimuth: 0, altitude: -90 };
+            if (lat === null || lon === null || !window.SunCalc) return { azimuth: 0, altitude: -90 };
             const pos = window.SunCalc.getPosition(date, lat, lon);
             let azimuth = (pos.azimuth * 180 / Math.PI + 180) % 360;
             return { azimuth, altitude: pos.altitude * 180 / Math.PI };
@@ -598,9 +645,11 @@
         }
 
         function findSolarPassage(targetAzimuth, lat, lon) {
+            const MIN_ALTITUDE = -6; // гражданские сумерки
+            const AZ_TOLERANCE = 0.5; // градусов
             const now = new Date();
             let t = now.getTime();
-            
+
             const d1 = new Date();
             const d2 = new Date();
             const dMid = new Date();
@@ -612,8 +661,10 @@
                 d1.setTime(t1);
                 d2.setTime(t2);
 
-                let az1 = getSolarPosition(d1, lat, lon).azimuth;
-                let az2 = getSolarPosition(d2, lat, lon).azimuth;
+                let pos1 = getSolarPosition(d1, lat, lon);
+                let pos2 = getSolarPosition(d2, lat, lon);
+                let az1 = pos1.azimuth;
+                let az2 = pos2.azimuth;
 
                 let uAz2 = unwrapAzimuth(az2, az1);
                 let uTarget = unwrapAzimuth(targetAzimuth, az1);
@@ -642,14 +693,22 @@
                             else left = mid;
                         }
                     }
-                    return new Date((left + right) / 2);
+
+                    const candidate = new Date((left + right) / 2);
+                    const candidatePos = getSolarPosition(candidate, lat, lon);
+                    // Финальная проверка высоты и точности азимута
+                    if (candidatePos.altitude >= MIN_ALTITUDE &&
+                        Math.abs(unwrapAzimuth(candidatePos.azimuth, targetAzimuth) - targetAzimuth) < AZ_TOLERANCE) {
+                        return candidate;
+                    }
+                    // Иначе продолжаем поиск (вблизи горизонта или экстремумов)
                 }
             }
             return null;
         }
 
         function formatResult(date, lat, lon) {
-            if (!date) return { dateStr: 'В этом году не освещается', timeStr: '00:00', special: '' };
+            if (!date) return { dateStr: 'Не освещается', timeStr: '--:--', special: '', valid: false };
             const timeStr = date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
             const dTarget = new Date(date); dTarget.setHours(0,0,0,0);
             const dNow = new Date(); dNow.setHours(0,0,0,0);
@@ -658,7 +717,7 @@
             let dateStr = diffDays === 0 ? 'Сегодня' : diffDays === 1 ? 'Завтра' : date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
             
             let special = '';
-            if (lat && lon) {
+            if (lat !== null && lon !== null) {
                 const pos = getSolarPosition(date, lat, lon);
                 const alt = Math.round(pos.altitude);
                 const times = window.SunCalc.getTimes(date, lat, lon);
@@ -671,19 +730,12 @@
                 
                 special = ` • ${phase ? phase + ' ' : ''}☀︎ ${alt}°`;
             }
-            return { dateStr, timeStr, special };
+            return { dateStr, timeStr, special, valid: true };
         }
 
-        function handleOrientation(e) {
-            let heading = e.webkitCompassHeading || (e.alpha !== null ? 360 - e.alpha : null);
-            if (heading !== null) {
-                targetDisplayHeading = heading;
-            }
-        }
-
+        // ==================== Управление состояниями ====================
         function resetLock() {
-            isLocked = false;
-            isCalculating = false;
+            setAppState(STATE.READY);
             targetAzimuth = null;
             compassViewport.classList.remove('locked');
             targetSunDot.style.display = 'none';
@@ -691,30 +743,53 @@
             shootLine.setAttribute('opacity', '0');
             calcBtn.classList.remove('active');
             dateLabel.textContent = '';
-            
-            clockEl.classList.remove('loading');
-            
+            clockEl.classList.remove('loading', 'empty');
             clearTimeout(clockTimeoutId);
             setClockTime(new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }), true);
             syncClockToNextMinute();
-            
             updateCurrentSunPosition();
             if (animationFrameId) { cancelAnimationFrame(animationFrameId); animationFrameId = null; }
         }
 
+        function handleOrientation(e) {
+            let heading = e.webkitCompassHeading || (e.alpha !== null ? 360 - e.alpha : null);
+            if (heading !== null && appState === STATE.READY) {
+                realHeading = normalizeAngle(heading);
+            }
+        }
+
         function executeCalculation() {
-            if (userLat === null || isCalculating || isLocked) return;
-            isCalculating = true;
-            isLocked = true;
-            
-            targetAzimuth = currentDisplayHeading;
-            if (targetAzimuth < 0) targetAzimuth += 360;
+            if (userLat === null || appState !== STATE.READY) return;
+
+            // Стабилизация: требуем, чтобы visualHeading почти совпадал с realHeading
+            if (Math.abs(visualHeading - realHeading) > 3) {
+                dateLabel.textContent = 'Калибровка…';
+                return;
+            }
+
+            setAppState(STATE.CALCULATING);
+            targetAzimuth = normalizeAngle(realHeading); // используем стабилизированное направление
             
             dateLabel.textContent = '';
             clockEl.classList.add('loading');
+            clockEl.classList.remove('empty');
 
             setTimeout(() => {
                 const passageDate = findSolarPassage(targetAzimuth, userLat, userLon);
+                if (!passageDate) {
+                    // Нет подходящего момента – специальное отображение
+                    dateLabel.textContent = 'Не освещается';
+                    clockEl.classList.remove('loading');
+                    clockEl.classList.add('empty');   // покажет "— — : — —"
+                    setAppState(STATE.LOCKED);
+                    compassViewport.classList.add('locked');
+                    calcBtn.classList.add('active');
+                    targetSunDot.style.display = 'none';
+                    animatingSunDot.style.display = 'none';
+                    shootLine.setAttribute('opacity', '0');
+                    return;
+                }
+
                 const { dateStr, timeStr, special } = formatResult(passageDate, userLat, userLon);
                 
                 const startT = performance.now();
@@ -759,7 +834,7 @@
 
                             compassViewport.classList.add('locked');
                             calcBtn.classList.add('active');
-                            isCalculating = false;
+                            setAppState(STATE.LOCKED);
                             return; 
                         }
                     }
@@ -770,106 +845,127 @@
         }
 
         function toggleLock() {
-            if (isCalculating) return;
-            if (isLocked) resetLock();
-            else executeCalculation();
+            if (appState === STATE.CALCULATING) return;
+            if (appState === STATE.LOCKED) {
+                resetLock();
+            } else if (appState === STATE.READY) {
+                executeCalculation();
+            }
         }
 
-        if (!localStorage.getItem('onboarding_done')) {
+        function startSunUpdater() {
+            clearInterval(sunUpdateIntervalId);
+            updateCurrentSunPosition();
+            sunUpdateIntervalId = setInterval(updateCurrentSunPosition, 60000);
+        }
+
+        // ==================== Инициализация и разрешения ====================
+        const onboardingDone = safeStorage.getItem('onboarding_done');
+        if (!onboardingDone) {
             startOverlay.style.display = 'none';
+            onboardingOverlay.classList.remove('hidden');
         } else {
             onboardingOverlay.style.display = 'none';
+            startOverlay.classList.remove('hidden');
         }
 
         onboardingBtn.addEventListener('click', () => {
             onboardingOverlay.classList.add('hidden');
             startOverlay.style.display = 'flex';
-            localStorage.setItem('onboarding_done', '1');
+            safeStorage.setItem('onboarding_done', '1');
         });
 
         startBtn.addEventListener('click', async () => {
             startBtn.textContent = 'Подключение...';
             startBtn.style.pointerEvents = 'none';
-            let permissionGranted = true;
+            setAppState(STATE.PERMISSION);
 
-            async function requestOrientationWithTimeout() {
-                if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-                    let timeoutId;
+            const requestPermission = async () => {
+                if (typeof DeviceOrientationEvent !== 'undefined' &&
+                    typeof DeviceOrientationEvent.requestPermission === 'function') {
                     try {
-                        const permissionPromise = DeviceOrientationEvent.requestPermission();
-                        const timeoutPromise = new Promise((_, reject) => 
-                            timeoutId = setTimeout(() => reject(new Error('Permission timeout')), 3000)
-                        );
-                        const state = await Promise.race([permissionPromise, timeoutPromise]);
-                        clearTimeout(timeoutId);
+                        const state = await DeviceOrientationEvent.requestPermission();
                         if (state !== 'granted') {
-                            alert('Доступ к компасу запрещён. Приложение не сможет работать.');
-                            permissionGranted = false;
-                        } else {
-                            window.addEventListener('deviceorientation', handleOrientation, true);
+                            throw new Error('denied');
                         }
-                    } catch (e) {
-                        clearTimeout(timeoutId);
                         window.addEventListener('deviceorientation', handleOrientation, true);
+                    } catch (e) {
+                        alert('Для работы компаса необходимо разрешить доступ к датчикам движения. Перезагрузите страницу и разрешите.');
+                        startBtn.textContent = 'Включить компас';
+                        startBtn.style.pointerEvents = 'auto';
+                        setAppState(STATE.IDLE);
+                        return false;
                     }
                 } else {
                     window.addEventListener('deviceorientation', handleOrientation, true);
                 }
-            }
+                return true;
+            };
 
-            await requestOrientationWithTimeout();
-            if (!permissionGranted) {
-                startBtn.textContent = 'Включить компас';
-                startBtn.style.pointerEvents = 'auto';
-                return;
-            }
+            const orientationGranted = await requestPermission();
+            if (!orientationGranted) return;
 
+            // Геолокация
             if (navigator.geolocation) {
                 navigator.geolocation.getCurrentPosition(
                     pos => {
                         userLat = pos.coords.latitude;
                         userLon = pos.coords.longitude;
                         reverseGeocode(userLat, userLon);
-                        updateCurrentSunPosition();
-                        sunUpdateIntervalId = setInterval(updateCurrentSunPosition, 60000);
+                        startSunUpdater();
+                        setAppState(STATE.READY);
                         startOverlay.classList.add('hidden');
+                        syncClockToNextMinute();
                     },
                     err => {
-                        userLat = 55.7558; userLon = 37.6173;
+                        userLat = 55.7558;
+                        userLon = 37.6173;
                         locationLabel.textContent = 'Москва (Демо)';
-                        updateCurrentSunPosition();
-                        sunUpdateIntervalId = setInterval(updateCurrentSunPosition, 60000);
+                        startSunUpdater();
+                        setAppState(STATE.READY);
                         startOverlay.classList.add('hidden');
+                        syncClockToNextMinute();
                     },
-                    { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 }
+                    { enableHighAccuracy: true, timeout: 8000, maximumAge: 10000 }
                 );
             } else {
-                userLat = 55.7558; userLon = 37.6173;
+                userLat = 55.7558;
+                userLon = 37.6173;
                 locationLabel.textContent = 'Москва (Демо)';
-                updateCurrentSunPosition();
-                sunUpdateIntervalId = setInterval(updateCurrentSunPosition, 60000);
+                startSunUpdater();
+                setAppState(STATE.READY);
                 startOverlay.classList.add('hidden');
+                syncClockToNextMinute();
             }
         });
 
         function reverseGeocode(lat, lon) {
             const cacheKey = `city_photon_${lat.toFixed(1)}_${lon.toFixed(1)}`;
-            const cachedCity = localStorage.getItem(cacheKey);
-            if (cachedCity) { locationLabel.textContent = cachedCity; return; }
+            const cachedCity = safeStorage.getItem(cacheKey);
+            if (cachedCity) {
+                locationLabel.textContent = cachedCity;
+                return;
+            }
             locationLabel.textContent = `${lat.toFixed(2)}°, ${lon.toFixed(2)}°`;
-            
+
             fetch(`https://photon.komoot.io/reverse?lon=${lon}&lat=${lat}`)
-            .then(r => r.json())
+            .then(r => {
+                if (!r.ok) throw new Error('network');
+                return r.json();
+            })
             .then(data => {
                 if (data.features && data.features.length > 0) {
                     const props = data.features[0].properties;
                     const city = props.city || props.town || props.village || props.county || props.state || props.country;
-                    if (city) { 
-                        locationLabel.textContent = city; 
-                        localStorage.setItem(cacheKey, city); 
+                    if (city) {
+                        locationLabel.textContent = city;
+                        safeStorage.setItem(cacheKey, city);
                     }
                 }
-            }).catch(() => {});
+            })
+            .catch(() => {
+                locationLabel.textContent = locationLabel.textContent || 'Определено';
+            });
         }
 
         calcBtn.addEventListener('click', toggleLock);
