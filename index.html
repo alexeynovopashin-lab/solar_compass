@@ -5,13 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
     <title>Солнечный компас</title>
 
-    <!-- Манифест и иконка – data URI для полной автономии.
-         В production рекомендуется заменить на реальные файлы. -->
+    <!-- Манифест и иконка (data URI для полной автономии) -->
     <link rel="manifest" href="data:application/manifest+json,%7B%22name%22%3A%22%D0%A1%D0%BE%D0%BB%D0%BD%D0%B5%D1%87%D0%BD%D1%8B%D0%B9%20%D0%BA%D0%BE%D0%BC%D0%BF%D0%B0%D1%81%22%2C%22short_name%22%3A%22%D0%A1%D0%BE%D0%BB%D0%BD%D1%86%D0%B5%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22theme_color%22%3A%22%23050505%22%2C%22background_color%22%3A%22%23050505%22%7D">
     <meta name="theme-color" content="#050505">
     <link rel="apple-touch-icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=">
 
-    <!-- SunCalc 2.0.1 (MIT) – встроен -->
+    <!-- SunCalc 2.0.1 (MIT) -->
     <script>
         (function () {
             'use strict';
@@ -409,7 +408,7 @@
         <div class="location-name" id="locationLabel">Определение...</div>
     </div>
 
-    <div class="build-number">Build 2026.07.23</div>
+    <div class="build-number" id="buildNumber"></div>
 
     <script>
         // ==================== Безопасное хранилище ====================
@@ -426,6 +425,15 @@
                     setItem(key, value) { memoryStorage[key] = value; }
                 };
             }
+        })();
+
+        // Динамический номер сборки
+        (function setBuildNumber() {
+            const now = new Date();
+            const pad = n => String(n).padStart(2, '0');
+            const dateStr = `${now.getFullYear()}.${pad(now.getMonth()+1)}.${pad(now.getDate())}`;
+            const timeStr = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+            document.getElementById('buildNumber').textContent = `Build ${dateStr} ${timeStr}`;
         })();
 
         // ==================== DOM-элементы ====================
@@ -494,7 +502,7 @@
         const onboardingOverlay = document.getElementById('onboardingOverlay');
         const onboardingBtn = document.getElementById('onboardingBtn');
 
-        // ==================== Машина состояний (используется полностью) ====================
+        // ==================== Машина состояний ====================
         const STATE = { IDLE: 'idle', PERMISSION: 'permission', READY: 'ready', CALCULATING: 'calculating', LOCKED: 'locked' };
         let appState = STATE.IDLE;
 
@@ -505,17 +513,36 @@
         // ==================== Переменные ====================
         let userLat = null;
         let userLon = null;
-        // realHeading – нормализованный азимут (0–360) от датчика, используется для расчётов
-        let realHeading = 0;
-        // visualHeading – неограниченный угол для плавной анимации SVG
-        let visualHeading = 0;
+        let realHeading = 0;          // нормализованный азимут от датчика (0-360)
+        let visualHeading = 0;        // неограниченный угол для плавной анимации SVG
         let currentSunAzimuth = 0;
         let targetAzimuth = null;
         let animationFrameId = null;
         let clockTimeoutId = null;
         let sunUpdateIntervalId = null;
+        let stabilizationTimer = null; // таймер автоматической стабилизации
 
-        // ==================== Компас: плавность без нормализации визуального угла ====================
+        // История положений для проверки стабильности
+        const headingHistory = [];
+
+        function recordHeading(heading) {
+            const now = performance.now();
+            headingHistory.push({ value: heading, time: now });
+            // Держим окно 500 мс
+            while (headingHistory.length > 0 && now - headingHistory[0].time > 500) {
+                headingHistory.shift();
+            }
+        }
+
+        function isHeadingStable() {
+            if (headingHistory.length < 5) return false; // недостаточно данных
+            const values = headingHistory.map(h => h.value);
+            const min = Math.min(...values);
+            const max = Math.max(...values);
+            return (max - min) < 5; // разброс менее 5°
+        }
+
+        // ==================== Компас: плавность без рывков ====================
         function normalizeAngle(angle) {
             return ((angle % 360) + 360) % 360;
         }
@@ -529,7 +556,6 @@
 
         function renderCompass() {
             if (appState !== STATE.LOCKED) {
-                // realHeading уже нормализован в обработчике, visualHeading догоняет его без сброса
                 visualHeading = smoothAngle(realHeading, visualHeading);
                 compassSvg.style.transform = `rotate(${-visualHeading}deg)`;
             }
@@ -537,7 +563,7 @@
         }
         renderCompass();
 
-        // ==================== ОДОМЕТР (истинный carry-over) ====================
+        // ==================== Одометр с истинным carry-over ====================
         const wheels = [...document.querySelectorAll(".wheel")];
         const TOTAL_SECTIONS = 30;
         let previousDigits = [0, 0, 0, 0];
@@ -554,7 +580,7 @@
 
         function hasCarry(index, newDigits) {
             if (index === newDigits.length - 1) return false;
-            // Механический carry: младший разряд уменьшился (прошёл полный цикл)
+            // Механический перенос: младший разряд уменьшился (прошёл полный цикл)
             return previousDigits[index + 1] > newDigits[index + 1];
         }
 
@@ -645,8 +671,8 @@
         }
 
         function findSolarPassage(targetAzimuth, lat, lon) {
-            const MIN_ALTITUDE = -6; // гражданские сумерки
-            const AZ_TOLERANCE = 0.5; // градусов
+            const MIN_ALTITUDE = -6;
+            const AZ_TOLERANCE = 0.5;
             const now = new Date();
             let t = now.getTime();
 
@@ -696,12 +722,10 @@
 
                     const candidate = new Date((left + right) / 2);
                     const candidatePos = getSolarPosition(candidate, lat, lon);
-                    // Финальная проверка высоты и точности азимута
                     if (candidatePos.altitude >= MIN_ALTITUDE &&
                         Math.abs(unwrapAzimuth(candidatePos.azimuth, targetAzimuth) - targetAzimuth) < AZ_TOLERANCE) {
                         return candidate;
                     }
-                    // Иначе продолжаем поиск (вблизи горизонта или экстремумов)
                 }
             }
             return null;
@@ -749,27 +773,49 @@
             syncClockToNextMinute();
             updateCurrentSunPosition();
             if (animationFrameId) { cancelAnimationFrame(animationFrameId); animationFrameId = null; }
+            // Очищаем таймер стабилизации, если был
+            if (stabilizationTimer) {
+                clearInterval(stabilizationTimer);
+                stabilizationTimer = null;
+            }
         }
 
         function handleOrientation(e) {
             let heading = e.webkitCompassHeading || (e.alpha !== null ? 360 - e.alpha : null);
             if (heading !== null && appState === STATE.READY) {
                 realHeading = normalizeAngle(heading);
+                recordHeading(realHeading);
             }
         }
 
         function executeCalculation() {
             if (userLat === null || appState !== STATE.READY) return;
 
-            // Стабилизация: требуем, чтобы visualHeading почти совпадал с realHeading
-            if (Math.abs(visualHeading - realHeading) > 3) {
+            // Проверка стабильности компаса
+            if (!isHeadingStable()) {
                 dateLabel.textContent = 'Калибровка…';
+                // Запускаем таймер автоматической проверки
+                if (!stabilizationTimer) {
+                    stabilizationTimer = setInterval(() => {
+                        if (isHeadingStable()) {
+                            clearInterval(stabilizationTimer);
+                            stabilizationTimer = null;
+                            dateLabel.textContent = '';
+                            executeCalculation(); // повторный вызов после стабилизации
+                        }
+                    }, 100);
+                }
                 return;
             }
 
+            // Очищаем таймер, если он был
+            if (stabilizationTimer) {
+                clearInterval(stabilizationTimer);
+                stabilizationTimer = null;
+            }
+
             setAppState(STATE.CALCULATING);
-            targetAzimuth = normalizeAngle(realHeading); // используем стабилизированное направление
-            
+            targetAzimuth = normalizeAngle(realHeading);
             dateLabel.textContent = '';
             clockEl.classList.add('loading');
             clockEl.classList.remove('empty');
@@ -777,10 +823,9 @@
             setTimeout(() => {
                 const passageDate = findSolarPassage(targetAzimuth, userLat, userLon);
                 if (!passageDate) {
-                    // Нет подходящего момента – специальное отображение
                     dateLabel.textContent = 'Не освещается';
                     clockEl.classList.remove('loading');
-                    clockEl.classList.add('empty');   // покажет "— — : — —"
+                    clockEl.classList.add('empty');
                     setAppState(STATE.LOCKED);
                     compassViewport.classList.add('locked');
                     calcBtn.classList.add('active');
@@ -905,7 +950,6 @@
             const orientationGranted = await requestPermission();
             if (!orientationGranted) return;
 
-            // Геолокация
             if (navigator.geolocation) {
                 navigator.geolocation.getCurrentPosition(
                     pos => {
