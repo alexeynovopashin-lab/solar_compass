@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
     <title>Солнечный компас</title>
 
-    <!-- Манифест и иконка (data URI для автономности) -->
+    <!-- Манифест и иконка (data URI) -->
     <link rel="manifest" href="data:application/manifest+json,%7B%22name%22%3A%22%D0%A1%D0%BE%D0%BB%D0%BD%D0%B5%D1%87%D0%BD%D1%8B%D0%B9%20%D0%BA%D0%BE%D0%BC%D0%BF%D0%B0%D1%81%22%2C%22short_name%22%3A%22%D0%A1%D0%BE%D0%BB%D0%BD%D1%86%D0%B5%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22theme_color%22%3A%22%23050505%22%2C%22background_color%22%3A%22%23050505%22%7D">
     <meta name="theme-color" content="#050505">
     <link rel="apple-touch-icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=">
@@ -161,10 +161,41 @@
             height: 72px;
             margin-top: 4px;
             color: var(--text-primary);
+            width: 100%;
+            max-width: 340px;
+            overflow: hidden;
+        }
+
+        /* Настоящая градиентная маска по дизайн-требованию[cite: 1] */
+        .clock::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 25%;
+            background: linear-gradient(to bottom, var(--bg) 0%, transparent 100%);
+            z-index: 5;
+            pointer-events: none;
+        }
+
+        .clock::after {
+            content: "";
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 25%;
+            background: linear-gradient(to top, var(--bg) 0%, transparent 100%);
+            z-index: 5;
+            pointer-events: none;
         }
 
         .clock.loading .digit,
         .clock.loading .separator { opacity: 0; }
+
+        .clock.loading::after,
+        .clock.loading::before { display: none; }
 
         .clock.loading::after {
             content: "···";
@@ -176,21 +207,7 @@
             font-size: 40px;
             letter-spacing: 8px;
             color: var(--text-secondary);
-        }
-
-        .clock.empty .digit,
-        .clock.empty .separator { opacity: 0; }
-
-        .clock.empty::after {
-            content: "— — : — —";
-            position: absolute;
-            inset: 0;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            font-size: 48px;
-            letter-spacing: 6px;
-            color: var(--text-secondary);
+            background: transparent;
         }
 
         .digit {
@@ -198,6 +215,7 @@
             width: 0.62em;
             height: 1em;
             overflow: hidden;
+            /* Убрано старое решение с mask-image для поддержки чистых градиентов */
         }
 
         .wheel {
@@ -205,7 +223,6 @@
             left: 0;
             top: 0;
             width: 100%;
-            transition: transform 0.4s cubic-bezier(0.2, 0.9, 0.2, 1);
             will-change: transform;
         }
 
@@ -427,7 +444,6 @@
             }
         })();
 
-        // Динамический номер сборки
         (function setBuildNumber() {
             const now = new Date();
             const pad = n => String(n).padStart(2, '0');
@@ -505,6 +521,7 @@
         // ==================== Машина состояний ====================
         const STATE = { IDLE: 'idle', PERMISSION: 'permission', READY: 'ready', CALCULATING: 'calculating', LOCKED: 'locked' };
         let appState = STATE.IDLE;
+        let chaosTimers = [];
 
         function setAppState(newState) {
             appState = newState;
@@ -513,8 +530,8 @@
         // ==================== Переменные ====================
         let userLat = null;
         let userLon = null;
-        let realHeading = 0;          // нормализованный азимут от датчика (0-360)
-        let visualHeading = 0;        // неограниченный угол для плавной анимации SVG
+        let realHeading = 0;
+        let visualHeading = 0;
         let currentSunAzimuth = 0;
         let targetAzimuth = null;
         let animationFrameId = null;
@@ -523,7 +540,6 @@
         let stabilizationTimer = null;
 
         const headingHistory = [];
-
         function recordHeading(heading) {
             const now = performance.now();
             headingHistory.push({ value: heading, time: now });
@@ -540,7 +556,7 @@
             return (max - min) < 5;
         }
 
-        // ==================== Компас: плавность без рывков ====================
+        // ==================== Компас ====================
         function normalizeAngle(angle) {
             return ((angle % 360) + 360) % 360;
         }
@@ -561,14 +577,17 @@
         }
         renderCompass();
 
-        // ==================== Одометр с истинным carry-over ====================
+        // ==================== ОДОМЕТР – механический ролик ====================
         const wheels = [...document.querySelectorAll(".wheel")];
-        const TOTAL_SECTIONS = 30;
+        const TOTAL_SECTIONS = 100; // Увеличено для длинных прокруток одометра[cite: 1]
         let previousDigits = [0, 0, 0, 0];
         let rotations = [0, 0, 0, 0];
         let isClockInitialized = false;
 
+        const cascadeDelay = [0, 80, 160, 240];
+
         wheels.forEach((w) => {
+            w.innerHTML = '';
             for (let i = 0; i < TOTAL_SECTIONS * 10; i++) {
                 const d = document.createElement("div");
                 d.textContent = i % 10;
@@ -576,55 +595,85 @@
             }
         });
 
-        function hasCarry(index, newDigits) {
-            if (index === newDigits.length - 1) return false;
-            // Механический перенос: младший разряд уменьшился (прошёл полный цикл)
-            return previousDigits[index + 1] > newDigits[index + 1];
-        }
-
-        function getCascadeDelay(index, newDigits) {
-            if (!hasCarry(index, newDigits)) return 0;
-            return 60 + getCascadeDelay(index + 1, newDigits);
-        }
-
         function setClockTime(timeStr, forceImmediate = false) {
             const digits = timeStr.replace(":", "").split("").map(Number);
             if (digits.length !== 4) return;
 
-            digits.forEach((targetValue, index) => {
-                const wheel = wheels[index];
-                if (!isClockInitialized || forceImmediate) {
-                    rotations[index] = (TOTAL_SECTIONS / 2) * 10 + targetValue;
+            if (!isClockInitialized || forceImmediate) {
+                digits.forEach((target, index) => {
+                    const wheel = wheels[index];
+                    rotations[index] = (TOTAL_SECTIONS / 2) * 10 + target;
                     wheel.style.transition = 'none';
                     wheel.style.transform = `translateY(${-rotations[index]}em)`;
-                    previousDigits[index] = targetValue;
-                    requestAnimationFrame(() => { wheel.style.transition = ''; });
-                } else if (targetValue !== previousDigits[index]) {
-                    let diff = targetValue - previousDigits[index];
-                    if (diff < 0) diff += 10;
-                    rotations[index] += diff;
+                    previousDigits[index] = target;
+                });
+                isClockInitialized = true;
+                
+                setTimeout(() => {
+                    wheels.forEach(w => w.style.transition = '');
+                }, 50);
+                return;
+            }
 
-                    const dynamicDelay = getCascadeDelay(index, digits);
-                    wheel.style.transitionDelay = `${dynamicDelay}ms`;
-                    wheel.style.transform = `translateY(${-rotations[index]}em)`;
-                    previousDigits[index] = targetValue;
+            // Математика физического одометра[cite: 1]
+            let oldMins = previousDigits[0]*600 + previousDigits[1]*60 + previousDigits[2]*10 + previousDigits[3];
+            let newMins = digits[0]*600 + digits[1]*60 + digits[2]*10 + digits[3];
+            
+            let diffMins = newMins - oldMins;
+            if (diffMins === 0) return; 
+            
+            if (diffMins < 0) diffMins += 24 * 60; // Плавное вращение вперед при переходе через 00:00
 
-                    // Сброс ленты при сильном отклонении
+            // Расчет реальных оборотов (carry-over cascade)
+            const stepD3 = diffMins;
+            const stepD2 = Math.floor((oldMins + diffMins) / 10) - Math.floor(oldMins / 10);
+            const stepD1 = Math.floor((oldMins + diffMins) / 60) - Math.floor(oldMins / 60);
+            const stepD0 = Math.floor((oldMins + diffMins) / 600) - Math.floor(oldMins / 600);
+
+            const steps = [stepD0, stepD1, stepD2, stepD3];
+            let maxSteps = Math.max(...steps);
+
+            // Динамическая продолжительность (ощущение тяжелой физической цифры)[cite: 1]
+            let actualDur = 0.65;
+            if (maxSteps > 10) actualDur = 1.0;
+            if (maxSteps > 50) actualDur = 1.6;
+            if (maxSteps > 100) actualDur = 2.2;
+
+            digits.forEach((target, index) => {
+                const wheel = wheels[index];
+                let s = steps[index];
+                
+                // Корректировка, гарантирующая точное попадание в нужную цифру
+                const expectedDigit = (previousDigits[index] + s) % 10;
+                let correction = target - expectedDigit;
+                if (correction < 0) correction += 10;
+                s += correction;
+
+                rotations[index] += s;
+
+                wheel.style.transition = `transform ${actualDur}s cubic-bezier(0.25, 0.8, 0.25, 1)`;
+                wheel.style.transitionDelay = `${cascadeDelay[index]}ms`;
+                wheel.style.transform = `translateY(${-rotations[index]}em)`;
+
+                previousDigits[index] = target;
+
+                // Незаметная пересборка в середине, чтобы лента казалась бесконечной[cite: 1]
+                const currentRotation = rotations[index];
+                const threshold = (TOTAL_SECTIONS - 15) * 10;
+                if (currentRotation > threshold) {
                     setTimeout(() => {
-                        if (rotations[index] > (TOTAL_SECTIONS - 5) * 10 || rotations[index] < 5 * 10) {
-                            rotations[index] = (TOTAL_SECTIONS / 2) * 10 + targetValue;
-                            wheel.style.transition = "none";
-                            wheel.style.transform = `translateY(${-rotations[index]}em)`;
-                            requestAnimationFrame(() => { wheel.style.transition = ""; });
-                        }
-                    }, 450 + dynamicDelay);
+                        const newMid = (TOTAL_SECTIONS / 2) * 10 + target;
+                        rotations[index] = newMid;
+                        wheel.style.transition = 'none';
+                        wheel.style.transform = `translateY(${-newMid}em)`;
+                        void wheel.offsetWidth; // force reflow
+                    }, (actualDur * 1000) + cascadeDelay[index] + 100);
                 }
             });
-            isClockInitialized = true;
         }
 
         function syncClockToNextMinute() {
-            if (appState !== STATE.LOCKED) {
+            if (appState === STATE.READY) {
                 const now = new Date();
                 const timeStr = now.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
                 setClockTime(timeStr);
@@ -632,6 +681,34 @@
             const nowMs = new Date();
             const msToNextMinute = 60000 - (nowMs.getSeconds() * 1000 + nowMs.getMilliseconds());
             clockTimeoutId = setTimeout(syncClockToNextMinute, msToNextMinute);
+        }
+
+        // Режим игрового автомата для состояний NO SUN[cite: 1]
+        function startChaosClock() {
+            stopChaosClock();
+            wheels.forEach((wheel, index) => {
+                const speed = 50 + Math.random() * 150;
+                wheel.style.transition = `transform ${speed}ms linear`;
+                
+                const t = setInterval(() => {
+                    rotations[index] += Math.floor(Math.random() * 20) + 10;
+                    wheel.style.transform = `translateY(${-rotations[index]}em)`;
+                    
+                    if (rotations[index] > (TOTAL_SECTIONS - 10) * 10) {
+                        rotations[index] = (TOTAL_SECTIONS / 2) * 10 + (rotations[index] % 10);
+                        wheel.style.transition = 'none';
+                        wheel.style.transform = `translateY(${-rotations[index]}em)`;
+                        void wheel.offsetWidth;
+                        wheel.style.transition = `transform ${speed}ms linear`;
+                    }
+                }, speed);
+                chaosTimers.push(t);
+            });
+        }
+
+        function stopChaosClock() {
+            chaosTimers.forEach(t => clearInterval(t));
+            chaosTimers = [];
         }
 
         // ==================== Астрономия ====================
@@ -730,7 +807,7 @@
         }
 
         function formatResult(date, lat, lon) {
-            if (!date) return { dateStr: 'Не освещается', timeStr: '--:--', special: '', valid: false };
+            if (!date) return { dateStr: 'Не освещается', timeStr: null, special: '', valid: false };
             const timeStr = date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
             const dTarget = new Date(date); dTarget.setHours(0,0,0,0);
             const dNow = new Date(); dNow.setHours(0,0,0,0);
@@ -746,23 +823,14 @@
                 const solarNoon = times.solarNoon;
                 const isMorning = date < solarNoon;
                 
-                // Определяем фазу по высоте солнца
                 let phase = '';
-                if (alt < -18) {
-                    phase = 'Ночь';
-                } else if (alt < -12) {
-                    phase = 'Астр. сумерки';
-                } else if (alt < -6) {
-                    phase = 'Навиг. сумерки';
-                } else if (alt < -0.833) {
-                    phase = 'Синий час';
-                } else if (alt < 0) {
-                    phase = isMorning ? 'Восход' : 'Закат';
-                } else if (alt < 6) {
-                    phase = 'Золотой час';
-                } else {
-                    phase = 'День';
-                }
+                if (alt < -18) phase = 'Ночь';
+                else if (alt < -12) phase = 'Астр. сумерки';
+                else if (alt < -6) phase = 'Навиг. сумерки';
+                else if (alt < -0.833) phase = 'Синий час';
+                else if (alt < 0) phase = isMorning ? 'Восход' : 'Закат';
+                else if (alt < 6) phase = 'Золотой час';
+                else phase = 'День';
                 
                 special = ` • ${phase} ☀︎ ${Math.round(alt)}°`;
             }
@@ -771,6 +839,7 @@
 
         // ==================== Управление состояниями ====================
         function resetLock() {
+            stopChaosClock();
             setAppState(STATE.READY);
             targetAzimuth = null;
             compassViewport.classList.remove('locked');
@@ -779,10 +848,14 @@
             shootLine.setAttribute('opacity', '0');
             calcBtn.classList.remove('active');
             dateLabel.textContent = '';
-            clockEl.classList.remove('loading', 'empty');
+            clockEl.classList.remove('loading');
             clearTimeout(clockTimeoutId);
-            setClockTime(new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }), true);
+            
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+            setClockTime(timeStr, true);
             syncClockToNextMinute();
+            
             updateCurrentSunPosition();
             if (animationFrameId) { cancelAnimationFrame(animationFrameId); animationFrameId = null; }
             if (stabilizationTimer) {
@@ -826,14 +899,13 @@
             targetAzimuth = normalizeAngle(realHeading);
             dateLabel.textContent = '';
             clockEl.classList.add('loading');
-            clockEl.classList.remove('empty');
 
             setTimeout(() => {
                 const passageDate = findSolarPassage(targetAzimuth, userLat, userLon);
                 if (!passageDate) {
                     dateLabel.textContent = 'Не освещается';
                     clockEl.classList.remove('loading');
-                    clockEl.classList.add('empty');
+                    startChaosClock(); // Режим слот-машины при отсутствии солнца[cite: 1]
                     setAppState(STATE.LOCKED);
                     compassViewport.classList.add('locked');
                     calcBtn.classList.add('active');
@@ -883,8 +955,10 @@
                             shootLine.setAttribute('opacity', '0');
                             clockEl.classList.remove('loading');
                             dateLabel.textContent = dateStr + special;
-                            setClockTime(timeStr, true);
-
+                            
+                            // Запускаем каскадный поиск нужного времени (без forceImmediate)[cite: 1]
+                            setClockTime(timeStr);
+                            
                             compassViewport.classList.add('locked');
                             calcBtn.classList.add('active');
                             setAppState(STATE.LOCKED);
