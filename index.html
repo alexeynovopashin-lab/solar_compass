@@ -131,13 +131,12 @@
             position: relative;
             z-index: 1;
             text-align: center;
-            margin-top: 16px;
-            min-height: 125px;
+            margin-top: 10px;
+            min-height: 110px;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            width: 100%;
         }
 
         .date-label {
@@ -154,20 +153,20 @@
             align-items: center;
             justify-content: center;
             gap: 2px;
-            font-size: 88px;
+            font-size: 72px;
             font-weight: 200;
             font-variant-numeric: tabular-nums;
             font-feature-settings: "tnum";
-            letter-spacing: -1.5px;
-            height: 88px;
-            margin-top: 12px;
+            letter-spacing: -1px;
+            height: 72px;
+            margin-top: 4px;
             color: var(--text-primary);
             width: 100%;
-            max-width: 380px;
+            max-width: 340px;
             overflow: hidden;
         }
 
-        /* Градиентные маски поверх барабанов */
+        /* Верхний градиент */
         .clock::before {
             content: "";
             position: absolute;
@@ -175,21 +174,22 @@
             left: 0;
             right: 0;
             height: 25%;
-            background: linear-gradient(to bottom, var(--bg) 0%, transparent 100%);
-            z-index: 5;
+            z-index: 10;
             pointer-events: none;
+            background: linear-gradient(to bottom, var(--bg) 0%, rgba(5,5,5,0.85) 45%, transparent 100%);
         }
 
+        /* Нижний градиент */
         .clock::after {
             content: "";
             position: absolute;
             bottom: 0;
             left: 0;
             right: 0;
-            height: 25%;
-            background: linear-gradient(to top, var(--bg) 0%, transparent 100%);
-            z-index: 5;
+            height: 20%;
+            z-index: 10;
             pointer-events: none;
+            background: linear-gradient(to top, var(--bg) 0%, transparent 100%);
         }
 
         .digit {
@@ -197,8 +197,8 @@
             width: 0.62em;
             height: 1em;
             overflow: hidden;
-            flex-shrink: 0;
-            contain: layout paint;
+            -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 20%, black 80%, transparent 100%);
+            mask-image: linear-gradient(to bottom, transparent 0%, black 20%, black 80%, transparent 100%);
         }
 
         .wheel {
@@ -207,9 +207,6 @@
             top: 0;
             width: 100%;
             will-change: transform;
-            -webkit-backface-visibility: hidden;
-            backface-visibility: hidden;
-            transform: translateZ(0);
         }
 
         .wheel div {
@@ -226,7 +223,6 @@
             font-weight: 200;
             line-height: 1;
             transform: translateY(-2px);
-            flex-shrink: 0;
         }
 
         .compass-viewport {
@@ -564,9 +560,9 @@
         }
         renderCompass();
 
-        // ==================== ОДОМЕТР – механический ролик ====================
+        // ==================== ОДОМЕТР ====================
         const wheels = [...document.querySelectorAll(".wheel")];
-        const TOTAL_SECTIONS = 10; // Компактный размер для экономии памяти GPU
+        const TOTAL_SECTIONS = 100;
         let previousDigits = [0, 0, 0, 0];
         let rotations = [0, 0, 0, 0];
         let isClockInitialized = false;
@@ -586,70 +582,47 @@
             const digits = timeStr.replace(":", "").split("").map(Number);
             if (digits.length !== 4) return;
 
-            if (!isClockInitialized || forceImmediate) {
-                digits.forEach((target, index) => {
-                    const wheel = wheels[index];
+            digits.forEach((target, index) => {
+                const wheel = wheels[index];
+                const current = previousDigits[index];
+
+                if (!isClockInitialized || forceImmediate) {
                     rotations[index] = (TOTAL_SECTIONS / 2) * 10 + target;
                     wheel.style.transition = 'none';
                     wheel.style.transform = `translateY(${-rotations[index]}em)`;
                     previousDigits[index] = target;
-                });
-                isClockInitialized = true;
-                setTimeout(() => {
-                    wheels.forEach(w => w.style.transition = '');
-                }, 50);
-                return;
-            }
+                    requestAnimationFrame(() => { wheel.style.transition = ''; });
+                    return;
+                }
 
-            let oldMins = previousDigits[0]*600 + previousDigits[1]*60 + previousDigits[2]*10 + previousDigits[3];
-            let newMins = digits[0]*600 + digits[1]*60 + digits[2]*10 + digits[3];
-            
-            let diffMins = newMins - oldMins;
-            if (diffMins === 0) return; 
-            if (diffMins < 0) diffMins += 24 * 60; // Плавное вращение вперед
+                if (target === current) return;
 
-            const stepD3 = diffMins;
-            const stepD2 = Math.floor((oldMins + diffMins) / 10) - Math.floor(oldMins / 10);
-            const stepD1 = Math.floor((oldMins + diffMins) / 60) - Math.floor(oldMins / 60);
-            const stepD0 = Math.floor((oldMins + diffMins) / 600) - Math.floor(oldMins / 600);
+                let diff = target - current;
+                if (diff < 0) diff += 10;
 
-            const steps = [stepD0, stepD1, stepD2, stepD3];
-            let maxSteps = Math.max(...steps);
+                rotations[index] += diff;
 
-            let actualDur = 0.65;
-            if (maxSteps > 10) actualDur = 1.0;
-            if (maxSteps > 50) actualDur = 1.6;
-            if (maxSteps > 100) actualDur = 2.2;
-
-            digits.forEach((target, index) => {
-                const wheel = wheels[index];
-                let s = steps[index];
-                
-                const expectedDigit = (previousDigits[index] + s) % 10;
-                let correction = target - expectedDigit;
-                if (correction < 0) correction += 10;
-                s += correction;
-
-                rotations[index] += s;
-
-                wheel.style.transition = `transform ${actualDur}s cubic-bezier(0.25, 0.8, 0.25, 1)`;
+                const duration = 0.45 + diff * 0.12;
+                wheel.style.transition = `transform ${duration}s cubic-bezier(0.25, 0.8, 0.25, 1)`;
                 wheel.style.transitionDelay = `${cascadeDelay[index]}ms`;
                 wheel.style.transform = `translateY(${-rotations[index]}em)`;
 
                 previousDigits[index] = target;
 
-                const currentRotation = rotations[index];
-                const threshold = (TOTAL_SECTIONS - 2) * 10;
-                if (currentRotation > threshold) {
+                const mid = (TOTAL_SECTIONS / 2) * 10;
+                const threshold = 5 * 10;
+                if (Math.abs(rotations[index] - mid) > (TOTAL_SECTIONS/2 - 5) * 10) {
+                    const resetTime = duration * 1000 + cascadeDelay[index] + 50;
                     setTimeout(() => {
-                        const newMid = (TOTAL_SECTIONS / 2) * 10 + target;
-                        rotations[index] = newMid;
+                        rotations[index] = (TOTAL_SECTIONS / 2) * 10 + target;
                         wheel.style.transition = 'none';
-                        wheel.style.transform = `translateY(${-newMid}em)`;
-                        void wheel.offsetWidth;
-                    }, (actualDur * 1000) + cascadeDelay[index] + 100);
+                        wheel.style.transform = `translateY(${-rotations[index]}em)`;
+                        requestAnimationFrame(() => { wheel.style.transition = ''; });
+                    }, resetTime);
                 }
             });
+
+            isClockInitialized = true;
         }
 
         function syncClockToNextMinute() {
@@ -663,7 +636,6 @@
             clockTimeoutId = setTimeout(syncClockToNextMinute, msToNextMinute);
         }
 
-        // Режим вращения барабанов (слот-машина) во время вычисления
         function startChaosClock() {
             stopChaosClock();
             wheels.forEach((wheel, index) => {
@@ -671,7 +643,8 @@
                 wheel.style.transition = `transform ${speed}ms linear`;
                 
                 const t = setInterval(() => {
-                    rotations[index] += Math.floor(Math.random() * 3) + 1;
+                    const step = Math.floor(Math.random() * 3) + 1;
+                    rotations[index] += step;
                     wheel.style.transform = `translateY(${-rotations[index]}em)`;
                     
                     if (rotations[index] > (TOTAL_SECTIONS - 2) * 10) {
@@ -689,6 +662,7 @@
         function stopChaosClock() {
             chaosTimers.forEach(t => clearInterval(t));
             chaosTimers = [];
+            // Восстанавливаем previousDigits из положения вращения (для плавного перехода)
             wheels.forEach((wheel, index) => {
                 previousDigits[index] = Math.floor(rotations[index]) % 10;
             });
@@ -832,12 +806,9 @@
             calcBtn.classList.remove('active');
             dateLabel.textContent = '';
             clearTimeout(clockTimeoutId);
-            
-            // Плавный заезд одометра в актуальное текущее время
             const now = new Date();
             const timeStr = now.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
-            setClockTime(timeStr, false); 
-
+            setClockTime(timeStr, false);
             syncClockToNextMinute();
             updateCurrentSunPosition();
             if (animationFrameId) { cancelAnimationFrame(animationFrameId); animationFrameId = null; }
@@ -881,8 +852,6 @@
             setAppState(STATE.CALCULATING);
             targetAzimuth = normalizeAngle(realHeading);
             dateLabel.textContent = '';
-            
-            // Сразу включаем вращение барабанов
             startChaosClock();
 
             setTimeout(() => {
@@ -938,7 +907,6 @@
                             shootLine.setAttribute('opacity', '0');
                             dateLabel.textContent = dateStr + special;
                             
-                            // В момент касания точки останавливаем хаос и докручиваем до итогового времени
                             stopChaosClock();
                             setClockTime(timeStr, false);
                             
