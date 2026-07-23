@@ -68,6 +68,7 @@
             --compass-size: 340px;
             --zoom-scale: 2;
             --btn-size: 72px;
+            --zoom-fine-tune: 0px; /* Ручная подстройка смещения (пиксели) */
         }
 
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -170,7 +171,6 @@
             transition: font-size 0.4s ease, height 0.4s ease, max-width 0.4s ease;
         }
 
-        /* Увеличенные часы в режиме zoom */
         body.zoomed .clock {
             font-size: 144px;
             height: 144px;
@@ -244,11 +244,10 @@
             justify-content: center;
             cursor: pointer;
             transition: transform 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
-            transform-origin: center center; /* Масштабирование от центра */
+            transform-origin: center center;
             margin-bottom: 0;
         }
 
-        /* ZOOM – сдвиг рассчитывается через JS и задаётся переменной */
         body.zoomed .compass-viewport {
             transform: translateY(var(--zoom-offset, 0px)) scale(var(--zoom-scale));
         }
@@ -423,9 +422,20 @@
         <div class="location-name" id="locationLabel">Определение...</div>
     </div>
 
-    <div class="build-number">Build 2026.07.23 18:45:00</div>
+    <div class="build-number" id="buildNumber"></div>
 
     <script>
+        // ==================== Динамический номер сборки ====================
+        (function() {
+            const now = new Date();
+            const pad = (n) => String(n).padStart(2, '0');
+            const build = `Build ${now.getFullYear()}.${pad(now.getMonth()+1)}.${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+            document.getElementById('buildNumber').textContent = build;
+        })();
+
+        // ==================== Переменная ручной подстройки зума ====================
+        const ZOOM_FINE_TUNE = 0; // Измените значение (в пикселях), чтобы сдвинуть центр компаса
+
         // ==================== Безопасное хранилище ====================
         const memoryStorage = {};
         const safeStorage = (() => {
@@ -548,7 +558,7 @@
             return (max - min) < 5;
         }
 
-        // ==================== Компас ====================
+        // ==================== Компас (работает в том числе в ZOOM) ====================
         function normalizeAngle(angle) {
             return ((angle % 360) + 360) % 360;
         }
@@ -561,7 +571,7 @@
         }
 
         function renderCompass() {
-            if (appState !== STATE.LOCKED && appState !== STATE.ZOOM) {
+            if (appState !== STATE.LOCKED) { // теперь ZOOM не блокирует вращение
                 visualHeading = smoothAngle(realHeading, visualHeading);
                 compassSvg.style.transform = `rotate(${-visualHeading}deg)`;
             }
@@ -635,7 +645,7 @@
         }
 
         function syncClockToNextMinute() {
-            if (appState === STATE.READY) {
+            if (appState === STATE.READY || appState === STATE.ZOOM) {
                 const now = new Date();
                 const timeStr = now.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
                 setClockTime(timeStr);
@@ -718,25 +728,23 @@
             if (appState === STATE.ZOOM) return;
             previousState = appState;
 
-            // Вычисляем смещение, чтобы центр компаса совпал с центром кнопки спуска
             const compassRect = compassViewport.getBoundingClientRect();
             const buttonRect = calcBtn.getBoundingClientRect();
             const compassCenterY = compassRect.top + compassRect.height / 2;
             const buttonCenterY = buttonRect.top + buttonRect.height / 2;
-            const offset = buttonCenterY - compassCenterY;
+            const baseOffset = buttonCenterY - compassCenterY;
+            const fineTune = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--zoom-fine-tune')) || 0;
+            const offset = baseOffset + fineTune + ZOOM_FINE_TUNE;
 
-            // Устанавливаем CSS-переменную
             document.documentElement.style.setProperty('--zoom-offset', offset + 'px');
-
             setAppState(STATE.ZOOM);
             document.body.classList.add('zoomed');
-            compassViewport.classList.add('locked');
+            // класс 'locked' больше не добавляем
         }
 
         function exitZoomMode() {
             if (appState !== STATE.ZOOM) return;
             document.body.classList.remove('zoomed');
-            compassViewport.classList.remove('locked');
             setAppState(previousState);
         }
 
@@ -893,7 +901,7 @@
 
         function handleOrientation(e) {
             let heading = e.webkitCompassHeading || (e.alpha !== null ? 360 - e.alpha : null);
-            if (heading !== null && (appState === STATE.READY)) {
+            if (heading !== null && (appState === STATE.READY || appState === STATE.ZOOM)) {
                 realHeading = normalizeAngle(heading);
                 recordHeading(realHeading);
             }
