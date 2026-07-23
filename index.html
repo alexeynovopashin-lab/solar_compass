@@ -137,6 +137,7 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
+            width: 100%;
         }
 
         .date-label {
@@ -196,6 +197,8 @@
             width: 0.62em;
             height: 1em;
             overflow: hidden;
+            flex-shrink: 0;
+            contain: layout paint;
         }
 
         .wheel {
@@ -204,6 +207,9 @@
             top: 0;
             width: 100%;
             will-change: transform;
+            -webkit-backface-visibility: hidden;
+            backface-visibility: hidden;
+            transform: translateZ(0);
         }
 
         .wheel div {
@@ -220,6 +226,7 @@
             font-weight: 200;
             line-height: 1;
             transform: translateY(-2px);
+            flex-shrink: 0;
         }
 
         .compass-viewport {
@@ -559,7 +566,7 @@
 
         // ==================== ОДОМЕТР – механический ролик ====================
         const wheels = [...document.querySelectorAll(".wheel")];
-        const TOTAL_SECTIONS = 100;
+        const TOTAL_SECTIONS = 10; // Компактный размер для экономии памяти GPU
         let previousDigits = [0, 0, 0, 0];
         let rotations = [0, 0, 0, 0];
         let isClockInitialized = false;
@@ -632,7 +639,7 @@
                 previousDigits[index] = target;
 
                 const currentRotation = rotations[index];
-                const threshold = (TOTAL_SECTIONS - 15) * 10;
+                const threshold = (TOTAL_SECTIONS - 2) * 10;
                 if (currentRotation > threshold) {
                     setTimeout(() => {
                         const newMid = (TOTAL_SECTIONS / 2) * 10 + target;
@@ -667,7 +674,7 @@
                     rotations[index] += Math.floor(Math.random() * 3) + 1;
                     wheel.style.transform = `translateY(${-rotations[index]}em)`;
                     
-                    if (rotations[index] > (TOTAL_SECTIONS - 10) * 10) {
+                    if (rotations[index] > (TOTAL_SECTIONS - 2) * 10) {
                         rotations[index] = (TOTAL_SECTIONS / 2) * 10 + (rotations[index] % 10);
                         wheel.style.transition = 'none';
                         wheel.style.transform = `translateY(${-rotations[index]}em)`;
